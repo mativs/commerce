@@ -6,9 +6,11 @@ from sqlalchemy import (
     CheckConstraint,
     DateTime,
     Float,
+    ForeignKey,
     MetaData,
     Numeric,
     String,
+    UniqueConstraint,
     func,
     true,
 )
@@ -96,3 +98,25 @@ class Product(TimestampMixin, Base):
     price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
     currency: Mapped[str] = mapped_column(String(3), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=true())
+
+
+class Stock(TimestampMixin, Base):
+    """Physical and allocated whole units for one warehouse/product pair."""
+
+    __tablename__ = "stock"
+    __table_args__ = (
+        UniqueConstraint("warehouse_id", "product_id", name="uq_stock_warehouse_product"),
+        CheckConstraint("on_hand >= 0", name="on_hand_nonnegative"),
+        CheckConstraint("reserved >= 0", name="reserved_nonnegative"),
+        CheckConstraint("reserved <= on_hand", name="reserved_within_on_hand"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    warehouse_id: Mapped[int] = mapped_column(
+        ForeignKey("warehouses.id", ondelete="RESTRICT"), nullable=False
+    )
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey("products.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    on_hand: Mapped[int] = mapped_column(nullable=False, server_default="0")
+    reserved: Mapped[int] = mapped_column(nullable=False, server_default="0")
