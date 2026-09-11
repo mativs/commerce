@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.adapters.inbound.http.health import router
+from app.adapters.inbound.http.warehouses import router as warehouses_router
 from app.infrastructure.config import Settings
 from app.infrastructure.database import create_engine, create_session_maker
 
@@ -30,4 +31,5 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["Content-Type", "Authorization"],
     )
     app.include_router(router)
+    app.include_router(warehouses_router)
     return app

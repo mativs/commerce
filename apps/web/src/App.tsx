@@ -1,5 +1,5 @@
-import { HomePage } from './pages/HomePage';
+import { WarehousesPage } from './pages/WarehousesPage';
 
 export default function App() {
-  return <HomePage />;
+  return <WarehousesPage />;
 }

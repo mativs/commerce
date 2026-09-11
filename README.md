@@ -2,7 +2,7 @@
 
 ## Overview
 
-A small API + web monorepo: a technical foundation with no product functionality.
+A small API + web monorepo with warehouse management and change history.
 
 ## Stack
 
@@ -30,7 +30,7 @@ Future SQLAlchemy models belong in `adapters/outbound/persistence/models.py`, us
 
 ## Web architecture
 
-React is a deliberately thin interface over the API. `src/api/client.ts` uses browser `fetch` and the public `VITE_API_URL` variable. `HomePage` displays loading, healthy and error states with a manual retry and a five-second timeout. Future workflow UI can live under `pages`, with components extracted when needed. There is no routing, state library or SDK framework.
+React is a deliberately thin interface over the API. `src/api/client.ts` uses browser `fetch` and the public `VITE_API_URL` variable. `WarehousesPage` provides a warehouse list, create/edit form, deletion confirmation, and change history. Requests show loading and error states and can be retried with Refresh. Workflow UI lives under `pages`, with components extracted when needed. There is no routing, state library or SDK framework.
 
 ## Async database behavior
 
@@ -110,7 +110,7 @@ alembic revision --autogenerate -m "description"
 alembic upgrade head
 ```
 
-Alembic reads application settings and `Base.metadata`, using an async connection with `run_sync`. There are no application tables or revisions yet. `upgrade head` initializes Alembic tracking. Always review generated migrations before applying them; migrations run explicitly, not at API startup.
+Alembic reads application settings and `Base.metadata`, using an async connection with `run_sync`. `upgrade head` creates the warehouse and audit tables, coordinate constraints, and the audit trigger. Always review generated migrations before applying them; migrations run explicitly, not at API startup.
 
 ## Testing
 
@@ -119,6 +119,25 @@ make test
 make check
 ```
 
-The health test covers HTTP 200, its JSON payload, allowed CORS and rejection of an untrusted origin; it needs no live database. To check browser failure handling, stop the API with `docker compose stop api`, click **Check again**, confirm **Unavailable**, then run `docker compose start api` and click **Try again**.
+The health test covers HTTP 200, its JSON payload, and CORS without a live database. Warehouse tests require PostgreSQL and applied migrations (`make migrate` before `make test`); they use isolated schemas and verify CRUD, validation, coordinate column types and constraints, soft deletion, and audit snapshots. Without `DATABASE_URL`, warehouse tests are skipped. To check browser failure handling, stop the API, click **Refresh**, then start the API and refresh again.
 
 Implementation references: [SQLAlchemy asyncio](https://docs.sqlalchemy.org/en/20/orm/extensions/asyncio.html), [Alembic async migrations](https://alembic.sqlalchemy.org/en/latest/cookbook.html#using-asyncio-with-alembic), [Vite environment variables](https://vite.dev/guide/env-and-mode).
+
+## Warehouses
+
+Run `make migrate` before using the warehouse page at http://localhost:5173.
+
+| Method | Path | Action |
+| --- | --- | --- |
+| POST | `/warehouses` | Create (201) |
+| GET | `/warehouses` | List active warehouses |
+| GET | `/warehouses/{id}` | Read an active warehouse |
+| PUT | `/warehouses/{id}` | Replace name and coordinates |
+| DELETE | `/warehouses/{id}` | Soft delete (204) |
+| GET | `/warehouses/{id}/logs` | Read change history, including after deletion |
+
+Create/update bodies contain `name`, `latitude`, and `longitude`. Names are trimmed and must have 1–255 characters. Latitude must be between −90 and 90; longitude between −180 and 180. Coordinates use SQLAlchemy `Float` and PostgreSQL `DOUBLE PRECISION NOT NULL`, with database CHECK constraints. Invalid input returns 422; missing or deleted warehouses return 404 on normal CRUD routes.
+
+All application tables must include timezone-aware `created_at`, `updated_at`, and nullable `deleted_at` columns using `TimestampMixin`. Deletion of business records is soft; list/read routes exclude deleted records. Future business tables must receive an audit trigger in their migration too. Alembic's internal version table is migration bookkeeping.
+
+The warehouse database trigger maintains update timestamps and writes create/update/delete snapshots to `audit_logs` atomically, including direct SQL writes. Logs retain before/after JSON, table name, record ID, and time. Audit rows carry the same timestamp columns but are not recursively audited; there are no endpoints to modify/delete logs. No actor identity is captured because authentication is not implemented. Audit tracking begins when migration 0002 is applied; earlier changes cannot be reconstructed.

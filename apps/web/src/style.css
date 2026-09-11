@@ -16,3 +16,26 @@ button { padding: 10px 16px; border: 1px solid #bccbc3; border-radius: 7px; back
 button:hover { background: #eaf1ec; }
 button:focus-visible { outline: 3px solid #187047; outline-offset: 3px; }
 button:disabled { opacity: 0.6; cursor: wait; }
+main { max-width: 900px; margin: 5vh auto; }
+h2 { font-size: 1.2rem; margin: 0 0 20px; }
+fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+label { display: flex; flex-direction: column; gap: 8px; font-weight: 600; margin-bottom: 20px; }
+input { width: 100%; min-width: 0; padding: 12px; border: 1px solid #bccbc3; border-radius: 7px; font: inherit; }
+input:focus-visible { outline: 3px solid #187047; outline-offset: 2px; }
+small { color: #52616b; font-weight: 400; }
+.coordinates { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+.actions, .list-heading { display: flex; align-items: center; gap: 10px; }
+.list-heading { justify-content: space-between; margin-bottom: 20px; }
+.list-heading h2 { margin: 0; }
+.primary { background: #187047; color: white; }
+.primary:hover { background: #115536; }
+.danger { color: #ae3434; }
+.warehouse-list { list-style: none; padding: 0; margin: 0; }
+.warehouse-list li { display: flex; justify-content: space-between; gap: 20px; align-items: center; padding: 20px 0; border-top: 1px solid #dce3df; }
+.warehouse-list strong { overflow-wrap: anywhere; }
+.warehouse-list .detail { margin: 8px 0 0; }
+@media (max-width: 560px) {
+  section { padding: 20px; }
+  .coordinates { grid-template-columns: 1fr; gap: 0; }
+  .warehouse-list li { align-items: flex-start; flex-direction: column; }
+}
