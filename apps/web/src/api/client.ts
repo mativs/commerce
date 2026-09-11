@@ -26,7 +26,7 @@ export async function getHealth(signal: AbortSignal): Promise<void> {
 
 export type WarehouseInput = { name: string; latitude: number; longitude: number };
 export type Warehouse = WarehouseInput & { id: number; created_at: string; updated_at: string; deleted_at: string | null };
-export type AuditLog = { id: number; action: string; created_at: string; old_values: Warehouse | null; new_values: Warehouse | null };
+export type AuditLog<T = Warehouse> = { id: number; action: string; created_at: string; old_values: T | null; new_values: T | null };
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
   const baseUrl = import.meta.env.VITE_API_URL?.trim().replace(/\/+$/, '');
@@ -48,7 +48,7 @@ async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
     const body = await response.json().catch(() => null);
     const detail = body?.detail;
     throw new Error(typeof detail === 'string' ? detail : response.status === 422
-      ? 'Enter a name, latitude between −90 and 90, and longitude between −180 and 180.'
+      ? (Array.isArray(detail) ? detail.map((issue: { loc?: string[]; msg?: string }) => `${issue.loc?.slice(1).join('.') || 'Input'}: ${issue.msg || 'Invalid value'}`).join('; ') : 'Check the form fields and try again.')
       : `Request failed (HTTP ${response.status}). Please try again.`);
   }
   return response.status === 204 ? undefined as T : response.json();
@@ -60,4 +60,31 @@ export const warehouseApi = {
   create: (data: WarehouseInput) => request<Warehouse>('/warehouses', { method: 'POST', body: JSON.stringify(data) }),
   update: (id: number, data: WarehouseInput) => request<Warehouse>(`/warehouses/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   remove: (id: number) => request<void>(`/warehouses/${id}`, { method: 'DELETE' }),
+};
+
+export type ShippingAddressInput = {
+  recipient_name: string;
+  phone: string | null;
+  address_line1: string;
+  address_line2: string | null;
+  city: string;
+  state: string;
+  postal_code: string;
+  country_code: string;
+  delivery_instructions: string | null;
+};
+export type ShippingAddress = ShippingAddressInput & {
+  id: number;
+  latitude: number;
+  longitude: number;
+  created_at: string;
+  updated_at: string;
+  deleted_at: string | null;
+};
+export const shippingAddressApi = {
+  list: (signal: AbortSignal) => request<ShippingAddress[]>('/shipping-addresses', { signal }),
+  create: (data: ShippingAddressInput) => request<ShippingAddress>('/shipping-addresses', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id: number, data: ShippingAddressInput) => request<ShippingAddress>(`/shipping-addresses/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  remove: (id: number) => request<void>(`/shipping-addresses/${id}`, { method: 'DELETE' }),
+  logs: (id: number) => request<AuditLog<ShippingAddress>[]>(`/shipping-addresses/${id}/logs`),
 };

@@ -39,3 +39,16 @@ small { color: #52616b; font-weight: 400; }
   .coordinates { grid-template-columns: 1fr; gap: 0; }
   .warehouse-list li { align-items: flex-start; flex-direction: column; }
 }
+.admin-header { background: #fff; border-bottom: 1px solid #dce3df; padding: 20px max(24px, calc((100vw - 852px) / 2)); }
+.brand { color: #172b36; font-weight: 750; text-decoration: none; }
+.brand span { color: #52616b; font-weight: 400; margin-left: 8px; }
+.admin-header nav { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
+.admin-header nav a { color: #52616b; padding: 10px 14px; border-radius: 7px; text-decoration: none; }
+.admin-header nav a[aria-current="page"] { background: #eaf1ec; color: #115536; font-weight: 650; }
+a:focus-visible { outline: 3px solid #187047; outline-offset: 3px; }
+textarea { width: 100%; resize: vertical; padding: 12px; border: 1px solid #bccbc3; border-radius: 7px; font: inherit; }
+textarea:focus-visible { outline: 3px solid #187047; outline-offset: 2px; }
+.actions { flex-wrap: wrap; }
+.warehouse-list li > div:first-child { min-width: 0; overflow-wrap: anywhere; }
+.warehouse-list li > .actions { flex-shrink: 0; }
+h3 { font-size: 0.95rem; }

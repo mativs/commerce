@@ -33,9 +33,22 @@ def database_client():
             )
             await connection.execute(
                 text(
+                    f'CREATE TABLE "{schema}".shipping_addresses '
+                    "(LIKE public.shipping_addresses INCLUDING ALL)"
+                )
+            )
+            await connection.execute(
+                text(
+                    f"CREATE TRIGGER shipping_address_audit BEFORE INSERT OR UPDATE OR DELETE "
+                    f'ON "{schema}".shipping_addresses FOR EACH ROW '
+                    "EXECUTE FUNCTION public.audit_record_change()"
+                )
+            )
+            await connection.execute(
+                text(
                     f"CREATE TRIGGER warehouse_audit BEFORE INSERT OR UPDATE OR DELETE "
                     f'ON "{schema}".warehouses FOR EACH ROW '
-                    "EXECUTE FUNCTION public.audit_warehouse_change()"
+                    "EXECUTE FUNCTION public.audit_record_change()"
                 )
             )
 
