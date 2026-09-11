@@ -24,6 +24,23 @@ def database_client():
     async def setup():
         async with engine.begin() as connection:
             await connection.execute(text(f'CREATE SCHEMA "{schema}"'))
+            await connection.execute(
+                text(f'CREATE TABLE "{schema}".products (LIKE public.products INCLUDING ALL)')
+            )
+            await connection.execute(
+                text(
+                    f"CREATE TRIGGER product_audit BEFORE INSERT OR UPDATE OR DELETE "
+                    f'ON "{schema}".products FOR EACH ROW '
+                    "EXECUTE FUNCTION public.audit_record_change()"
+                )
+            )
+            for field in ("sku", "ean"):
+                await connection.execute(
+                    text(
+                        f'ALTER TABLE "{schema}".products RENAME CONSTRAINT products_{field}_key '
+                        f"TO uq_products_{field}"
+                    )
+                )
             # Copy the migrated table so tests exercise real migration constraints.
             await connection.execute(
                 text(f'CREATE TABLE "{schema}".warehouses (LIKE public.warehouses INCLUDING ALL)')

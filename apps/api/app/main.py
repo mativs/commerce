@@ -7,6 +7,7 @@ from fastapi.responses import JSONResponse
 
 from app.adapters.inbound.http.dependencies import DatabaseSession
 from app.adapters.inbound.http.health import router
+from app.adapters.inbound.http.products import router as products_router
 from app.adapters.inbound.http.shipping_addresses import get_shipping_address_service
 from app.adapters.inbound.http.shipping_addresses import router as shipping_addresses_router
 from app.adapters.inbound.http.warehouses import router as warehouses_router
@@ -62,6 +63,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_headers=["Content-Type", "Authorization"],
     )
     app.include_router(router)
+    app.include_router(products_router)
     app.include_router(warehouses_router)
     app.include_router(shipping_addresses_router)
     return app

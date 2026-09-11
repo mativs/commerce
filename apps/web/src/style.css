@@ -52,3 +52,6 @@ textarea:focus-visible { outline: 3px solid #187047; outline-offset: 2px; }
 .warehouse-list li > div:first-child { min-width: 0; overflow-wrap: anywhere; }
 .warehouse-list li > .actions { flex-shrink: 0; }
 h3 { font-size: 0.95rem; }
+
+.checkbox-label { flex-direction: row; align-items: center; }
+.checkbox-label input { width: auto; }

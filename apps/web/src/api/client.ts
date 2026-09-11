@@ -88,3 +88,23 @@ export const shippingAddressApi = {
   remove: (id: number) => request<void>(`/shipping-addresses/${id}`, { method: 'DELETE' }),
   logs: (id: number) => request<AuditLog<ShippingAddress>[]>(`/shipping-addresses/${id}/logs`),
 };
+
+export type ProductInput = {
+  name: string;
+  sku: string;
+  description: string | null;
+  price: string;
+  currency: string;
+  is_active: boolean;
+};
+export type Product = ProductInput & {
+  ean: string | null;
+  id: number; created_at: string; updated_at: string; deleted_at: string | null;
+};
+export const productApi = {
+  list: (signal: AbortSignal) => request<Product[]>('/products', { signal }),
+  create: (data: ProductInput) => request<Product>('/products', { method: 'POST', body: JSON.stringify(data) }),
+  update: (id: number, data: ProductInput) => request<Product>(`/products/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  remove: (id: number) => request<void>(`/products/${id}`, { method: 'DELETE' }),
+  logs: (id: number) => request<AuditLog<Product>[]>(`/products/${id}/logs`),
+};
