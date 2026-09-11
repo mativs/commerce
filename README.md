@@ -12,6 +12,8 @@ make up
 make migrate
 ```
 
+The migrations also add 5 warehouses, 5 sample shipping addresses, and 100 products priced in USD.
+
 ## Usage
 
 - Open the [admin app](http://localhost:5173) to create, edit, delete, and view change history for warehouses, shipping addresses, and products.
