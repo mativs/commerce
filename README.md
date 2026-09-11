@@ -132,11 +132,11 @@ Run `make migrate` before using the warehouse page at http://localhost:5173.
 | POST | `/warehouses` | Create (201) |
 | GET | `/warehouses` | List active warehouses |
 | GET | `/warehouses/{id}` | Read an active warehouse |
-| PUT | `/warehouses/{id}` | Replace name and coordinates |
+| PUT | `/warehouses/{id}` | Rename; preserve assigned coordinates |
 | DELETE | `/warehouses/{id}` | Soft delete (204) |
 | GET | `/warehouses/{id}/logs` | Read change history, including after deletion |
 
-Create/update bodies contain `name`, `latitude`, and `longitude`. Names are trimmed and must have 1–255 characters. Latitude must be between −90 and 90; longitude between −180 and 180. Coordinates use SQLAlchemy `Float` and PostgreSQL `DOUBLE PRECISION NOT NULL`, with database CHECK constraints. Invalid input returns 422; missing or deleted warehouses return 404 on normal CRUD routes.
+Create/update bodies contain only `name`. Coordinates are assigned automatically on creation and are read-only in API responses; sending latitude/longitude returns 422. Renaming preserves the saved location. Names are trimmed and must have 1–255 characters. The utility `random_warehouse_coordinates()` in `app/adapters/outbound/geocoding/warehouse_locations.py` randomly selects from 20 hardcoded Mar del Plata sample points, with no overlap with the 100 shipping address points. Selection is with replacement, so warehouses can share a point. Existing warehouse locations are preserved. Latitude must be between −90 and 90; longitude between −180 and 180. Coordinates use SQLAlchemy `Float` and PostgreSQL `DOUBLE PRECISION NOT NULL`, with database CHECK constraints. Invalid input returns 422; missing or deleted warehouses return 404 on normal CRUD routes.
 
 All application tables must include timezone-aware `created_at`, `updated_at`, and nullable `deleted_at` columns using `TimestampMixin`. Deletion of business records is soft; list/read routes exclude deleted records. Future business tables must receive an audit trigger in their migration too. Alembic's internal version table is migration bookkeeping.
 

@@ -24,8 +24,8 @@ export async function getHealth(signal: AbortSignal): Promise<void> {
   }
 }
 
-export type WarehouseInput = { name: string; latitude: number; longitude: number };
-export type Warehouse = WarehouseInput & { id: number; created_at: string; updated_at: string; deleted_at: string | null };
+export type WarehouseInput = { name: string };
+export type Warehouse = WarehouseInput & { latitude: number; longitude: number; id: number; created_at: string; updated_at: string; deleted_at: string | null };
 export type AuditLog<T = Warehouse> = { id: number; action: string; created_at: string; old_values: T | null; new_values: T | null };
 
 async function request<T>(path: string, options: RequestInit = {}): Promise<T> {

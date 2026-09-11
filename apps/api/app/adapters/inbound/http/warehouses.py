@@ -5,6 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
 from app.adapters.inbound.http.dependencies import DatabaseSession
+from app.adapters.outbound.geocoding.warehouse_locations import random_warehouse_coordinates
 from app.adapters.outbound.persistence.models import AuditLog, Warehouse
 
 router = APIRouter(prefix="/warehouses", tags=["warehouses"])
@@ -14,13 +15,13 @@ class WarehouseInput(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
 
     name: str = Field(min_length=1, max_length=255)
-    latitude: float = Field(ge=-90, le=90, allow_inf_nan=False)
-    longitude: float = Field(ge=-180, le=180, allow_inf_nan=False)
 
 
 class WarehouseOutput(WarehouseInput):
     model_config = ConfigDict(from_attributes=True)
     id: int
+    latitude: float = Field(ge=-90, le=90, allow_inf_nan=False)
+    longitude: float = Field(ge=-180, le=180, allow_inf_nan=False)
     created_at: datetime
     updated_at: datetime
     deleted_at: datetime | None
@@ -44,8 +45,9 @@ async def list_warehouses(session: DatabaseSession):
 
 @router.post("", response_model=WarehouseOutput, status_code=status.HTTP_201_CREATED)
 async def create_warehouse(data: WarehouseInput, session: DatabaseSession, response: Response):
+    latitude, longitude = random_warehouse_coordinates()
     async with session.begin():
-        warehouse = Warehouse(**data.model_dump())
+        warehouse = Warehouse(name=data.name, latitude=latitude, longitude=longitude)
         session.add(warehouse)
         await session.flush()
     response.headers["Location"] = f"/warehouses/{warehouse.id}"

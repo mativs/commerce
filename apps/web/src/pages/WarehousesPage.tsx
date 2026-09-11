@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { warehouseApi, type Warehouse, type AuditLog } from '../api/client';
 
-const emptyForm = { name: '', latitude: '', longitude: '' };
+const emptyForm = { name: '' };
 
 export function WarehousesPage() {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -36,7 +36,7 @@ export function WarehousesPage() {
     setError('');
     setNotice('');
     try {
-      const data = { name: form.name.trim(), latitude: Number(form.latitude), longitude: Number(form.longitude) };
+      const data = { name: form.name.trim() };
       const saved = editingId === null
         ? await warehouseApi.create(data)
         : await warehouseApi.update(editingId, data);
@@ -83,10 +83,7 @@ export function WarehousesPage() {
         <form onSubmit={save}>
           <fieldset disabled={busy || loading}>
             <label>Name<input required maxLength={255} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></label>
-            <div className="coordinates">
-              <label>Latitude<input type="number" required min={-90} max={90} step="any" value={form.latitude} onChange={(event) => setForm({ ...form, latitude: event.target.value })} /><small>−90 to 90</small></label>
-              <label>Longitude<input type="number" required min={-180} max={180} step="any" value={form.longitude} onChange={(event) => setForm({ ...form, longitude: event.target.value })} /><small>−180 to 180</small></label>
-            </div>
+            <p className="detail">A location in Mar del Plata is assigned automatically when you create a warehouse.</p>
             <div className="actions">
               <button className="primary" type="submit" disabled={!form.name.trim()}>{busy ? 'Saving…' : editingId === null ? 'Add warehouse' : 'Save changes'}</button>
               {editingId !== null && <button type="button" onClick={reset}>Cancel</button>}
@@ -107,7 +104,7 @@ export function WarehousesPage() {
                 <div className="actions">
                   <button disabled={busy} aria-label={`Edit ${warehouse.name}`} onClick={() => {
                     setEditingId(warehouse.id);
-                    setForm({ name: warehouse.name, latitude: String(warehouse.latitude), longitude: String(warehouse.longitude) });
+                    setForm({ name: warehouse.name });
                     setNotice('');
                     document.getElementById('warehouse-form-title')?.scrollIntoView({ behavior: 'smooth' });
                   }}>Edit</button>
