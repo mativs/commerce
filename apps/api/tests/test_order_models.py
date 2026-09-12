@@ -41,6 +41,7 @@ def order_models(database_client):
             "0013_remove_shipping_addresses.py",
             "0014_remove_product_currency.py",
             "0015_split_order_payment_idempotency.py",
+            "0016_remove_stock_deleted_at.py",
         ):
             path = Path(__file__).parents[1] / "migrations/versions" / filename
             spec = importlib.util.spec_from_file_location("migration", path)

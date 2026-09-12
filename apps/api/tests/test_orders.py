@@ -337,7 +337,7 @@ def test_missing_stock_cannot_partially_book(checkout):
     async def remove_stock():
         async with sessions() as session, session.begin():
             await session.execute(
-                text("UPDATE stock SET deleted_at=clock_timestamp() WHERE product_id=:pid"),
+        text("UPDATE stock SET on_hand=0, reserved=0 WHERE product_id=:pid"),
                 {"pid": body["items"][0]["product_id"]},
             )
 

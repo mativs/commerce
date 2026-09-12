@@ -177,7 +177,6 @@ class SqlAlchemyOrderRepository:
                     )
                     .where(
                         Warehouse.deleted_at.is_(None),
-                        Stock.deleted_at.is_(None),
                         Stock.on_hand - Stock.reserved >= OrderItem.quantity,
                     )
                     .group_by(Warehouse.id)
@@ -230,7 +229,6 @@ class SqlAlchemyOrderRepository:
                     .where(
                         Stock.warehouse_id == warehouse_id,
                         Stock.product_id.in_(quantities),
-                        Stock.deleted_at.is_(None),
                     )
                     .order_by(Stock.product_id)
                     .with_for_update()

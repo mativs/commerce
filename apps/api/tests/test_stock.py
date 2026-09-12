@@ -27,6 +27,11 @@ def stock_data(database_client):
         # Run the real migration in the fixture's isolated schema, including FKs.
         with Operations.context(MigrationContext.configure(connection)):
             module.upgrade()
+            path = Path(__file__).parents[1] / "migrations/versions/0016_remove_stock_deleted_at.py"
+            spec = importlib.util.spec_from_file_location("remove_stock_deleted_at", path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            module.upgrade()
 
     async def setup():
         async with sessions() as session, session.begin():
@@ -50,7 +55,7 @@ def test_stock_defaults_update_and_audit(stock_data):
             session.add(row)
             await session.flush()
             assert row.on_hand == row.reserved == 0
-            assert row.created_at and row.updated_at and row.deleted_at is None
+            assert row.created_at and row.updated_at
             stock_id, created_at, updated_at = row.id, row.created_at, row.updated_at
         async with sessions() as session, session.begin():
             await session.execute(
@@ -106,9 +111,6 @@ def test_unique_pair_and_foreign_keys(stock_data):
     async def check():
         async with sessions() as session, session.begin():
             session.add(Stock(**ids, on_hand=5, reserved=5))
-        # A soft-deleted balance still owns the pair.
-        async with sessions() as session, session.begin():
-            await session.execute(text("UPDATE stock SET deleted_at = now()"))
         for values in (ids, {**ids, "warehouse_id": -1}, {**ids, "product_id": -1}):
             async with sessions() as session:
                 with pytest.raises(IntegrityError):

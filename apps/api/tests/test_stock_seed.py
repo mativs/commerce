@@ -28,6 +28,7 @@ def test_stock_seed_distribution_audit_and_existing_balances(database_client):
             )
             connection = await session.connection()
             await connection.run_sync(run_migration, "0006_stock.py")
+            await connection.run_sync(run_migration, "0016_remove_stock_deleted_at.py")
             await connection.run_sync(run_migration, "0010_seed_stock.py")
             rows = (
                 await session.execute(
@@ -56,10 +57,10 @@ def test_stock_seed_distribution_audit_and_existing_balances(database_client):
                 )
                 == 320
             )
-            # Reapplication must neither replenish used inventory nor revive deleted balances.
+            # Reapplication must not replenish existing balances.
             await session.execute(
                 text(
-                    "UPDATE stock SET on_hand=7, reserved=3, deleted_at=clock_timestamp() "
+                    "UPDATE stock SET on_hand=7, reserved=3 "
                     "WHERE id=(SELECT min(id) FROM stock)"
                 )
             )

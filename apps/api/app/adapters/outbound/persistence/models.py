@@ -32,9 +32,12 @@ class Base(DeclarativeBase):
     )
 
 
-class TimestampMixin:
+class CreatedUpdatedMixin:
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class TimestampMixin(CreatedUpdatedMixin):
     deleted_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
 
@@ -90,7 +93,7 @@ class Customer(TimestampMixin, Base):
     email: Mapped[str] = mapped_column(String(254), nullable=False, unique=True)
 
 
-class Stock(TimestampMixin, Base):
+class Stock(CreatedUpdatedMixin, Base):
     """Physical and allocated whole units for one warehouse/product pair."""
 
     __tablename__ = "stock"

@@ -65,7 +65,6 @@ async def _products_with_stock(
             Stock,
             and_(
                 Stock.product_id == Product.id,
-                Stock.deleted_at.is_(None),
             ),
         )
         .outerjoin(
@@ -124,7 +123,6 @@ async def get_product(product_id: int, session: DatabaseSession):
                 .join(Warehouse, Warehouse.id == Stock.warehouse_id)
                 .where(
                     Stock.product_id == product.id,
-                    Stock.deleted_at.is_(None),
                     Warehouse.deleted_at.is_(None),
                 )
                 .order_by(Warehouse.id)
