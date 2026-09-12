@@ -40,12 +40,14 @@ class SqlAlchemyShippingAddressRepository:
             raise ShippingAddressNotFound
         return row
 
-    async def list(self) -> list[ShippingAddress]:
+    async def list(self, limit: int = 50, offset: int = 0) -> list[ShippingAddress]:
         async with self.session.begin():
             rows = await self.session.scalars(
                 select(ShippingAddressRow)
                 .where(ShippingAddressRow.deleted_at.is_(None))
                 .order_by(ShippingAddressRow.id)
+                .limit(limit)
+                .offset(offset)
             )
             return [to_domain(row) for row in rows]
 

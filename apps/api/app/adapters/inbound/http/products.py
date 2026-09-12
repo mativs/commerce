@@ -1,12 +1,13 @@
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, HTTPException, Query, Response, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 
-from app.adapters.inbound.http.dependencies import DatabaseSession
+from app.adapters.inbound.http.dependencies import DatabaseSession, PageLimit, PageOffset
 from app.adapters.inbound.http.warehouses import AuditLogOutput
 from app.adapters.outbound.identifiers.ean import random_ean
 from app.adapters.outbound.persistence.models import AuditLog, Product
@@ -73,12 +74,27 @@ def raise_identifier_conflict(error: IntegrityError) -> None:
 
 
 @router.get("", response_model=list[ProductOutput])
-async def list_products(session: DatabaseSession):
-    return (
-        await session.scalars(
-            select(Product).where(Product.deleted_at.is_(None)).order_by(Product.id)
+async def list_products(
+    session: DatabaseSession,
+    limit: PageLimit = 50,
+    offset: PageOffset = 0,
+    q: Annotated[str | None, Query(max_length=255)] = None,
+    is_active: bool | None = None,
+    currency: Annotated[str | None, Query(pattern=r"^[A-Z]{3}$")] = None,
+):
+    query = select(Product).where(Product.deleted_at.is_(None))
+    if q and q.strip():
+        query = query.where(
+            or_(
+                Product.name.icontains(q.strip(), autoescape=True),
+                Product.sku.icontains(q.strip(), autoescape=True),
+            )
         )
-    ).all()
+    if is_active is not None:
+        query = query.where(Product.is_active == is_active)
+    if currency is not None:
+        query = query.where(Product.currency == currency)
+    return (await session.scalars(query.order_by(Product.id).limit(limit).offset(offset))).all()
 
 
 @router.post("", response_model=ProductOutput, status_code=status.HTTP_201_CREATED)
@@ -130,7 +146,9 @@ async def delete_product(product_id: int, session: DatabaseSession):
 
 
 @router.get("/{product_id}/logs", response_model=list[AuditLogOutput])
-async def product_logs(product_id: int, session: DatabaseSession):
+async def product_logs(
+    product_id: int, session: DatabaseSession, limit: PageLimit = 50, offset: PageOffset = 0
+):
     if await session.get(Product, product_id) is None:
         raise HTTPException(status_code=404, detail="Product not found.")
     return (
@@ -138,5 +156,7 @@ async def product_logs(product_id: int, session: DatabaseSession):
             select(AuditLog)
             .where(AuditLog.table_name == "products", AuditLog.record_id == product_id)
             .order_by(AuditLog.id)
+            .limit(limit)
+            .offset(offset)
         )
     ).all()

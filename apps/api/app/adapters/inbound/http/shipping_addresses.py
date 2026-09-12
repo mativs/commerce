@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 from sqlalchemy import select
 
-from app.adapters.inbound.http.dependencies import DatabaseSession
+from app.adapters.inbound.http.dependencies import DatabaseSession, PageLimit, PageOffset
 from app.adapters.inbound.http.warehouses import AuditLogOutput
 from app.adapters.outbound.persistence.models import AuditLog
 from app.adapters.outbound.persistence.models import ShippingAddress as ShippingAddressRow
@@ -73,8 +73,10 @@ class ShippingAddressOutput(ShippingAddressInput):
 
 
 @router.get("", response_model=list[ShippingAddressOutput])
-async def list_addresses(service: AddressService):
-    return [ShippingAddressOutput.from_domain(address) for address in await service.list()]
+async def list_addresses(service: AddressService, limit: PageLimit = 50, offset: PageOffset = 0):
+    return [
+        ShippingAddressOutput.from_domain(address) for address in await service.list(limit, offset)
+    ]
 
 
 @router.post("", response_model=ShippingAddressOutput, status_code=status.HTTP_201_CREATED)
@@ -103,7 +105,9 @@ async def delete_address(address_id: int, service: AddressService):
 
 
 @router.get("/{address_id}/logs", response_model=list[AuditLogOutput])
-async def address_logs(address_id: int, session: DatabaseSession):
+async def address_logs(
+    address_id: int, session: DatabaseSession, limit: PageLimit = 50, offset: PageOffset = 0
+):
     if await session.get(ShippingAddressRow, address_id) is None:
         raise HTTPException(status_code=404, detail="Shipping address not found.")
     return (
@@ -111,5 +115,7 @@ async def address_logs(address_id: int, session: DatabaseSession):
             select(AuditLog)
             .where(AuditLog.table_name == "shipping_addresses", AuditLog.record_id == address_id)
             .order_by(AuditLog.id)
+            .limit(limit)
+            .offset(offset)
         )
     ).all()

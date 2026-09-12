@@ -34,7 +34,7 @@ def test_seed_data_and_audit(database_client):
     asyncio.run(apply_seed(sessions))
     warehouses = client.get("/warehouses").json()
     addresses = client.get("/shipping-addresses").json()
-    response = client.get("/products")
+    response = client.get("/products?limit=100")
     assert response.status_code == 200
     products = response.json()
     assert len(warehouses) == 5 and len(addresses) == 5 and len(products) == 100
@@ -76,7 +76,7 @@ def test_seed_conflict_is_atomic(database_client):
         asyncio.run(apply_seed(sessions))
     assert client.get("/warehouses").json() == []
     assert client.get("/shipping-addresses").json() == []
-    assert client.get("/products").json() == [existing.json()]
+    assert client.get("/products?limit=100").json() == [existing.json()]
 
     async def count_logs():
         async with sessions() as session:

@@ -3,10 +3,10 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.adapters.inbound.http.dependencies import DatabaseSession
+from app.adapters.inbound.http.dependencies import DatabaseSession, PageLimit, PageOffset
 from app.adapters.inbound.http.shipping_addresses import ShippingAddressInput
 from app.adapters.outbound.persistence.orders import SqlAlchemyOrderRepository
 from app.application.services.orders import OrderService
@@ -119,8 +119,8 @@ async def create_order(
 @router.get("", response_model=list[OrderOutput])
 async def list_orders(
     service: Service,
-    limit: Annotated[int, Query(ge=1, le=100)] = 50,
-    offset: Annotated[int, Query(ge=0)] = 0,
+    limit: PageLimit = 50,
+    offset: PageOffset = 0,
 ):
     return [asdict(order) for order in await service.repository.list(limit, offset)]
 

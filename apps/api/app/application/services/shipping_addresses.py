@@ -8,8 +8,8 @@ class ShippingAddressService:
         self.repository = repository
         self.geocoder = geocoder
 
-    async def list(self) -> list[ShippingAddress]:
-        return await self.repository.list()
+    async def list(self, limit: int = 50, offset: int = 0) -> list[ShippingAddress]:
+        return await self.repository.list(limit, offset)
 
     async def get(self, address_id: int) -> ShippingAddress:
         return await self.repository.get(address_id)

@@ -59,8 +59,9 @@ async function request<T>(path: string, options: RequestInit = {}, timeout = 100
 }
 
 export const warehouseApi = {
-  logs: (id: number) => request<AuditLog[]>(`/warehouses/${id}/logs`),
-  list: (signal: AbortSignal) => request<Warehouse[]>('/warehouses', { signal }),
+  logs: (id: number, offset = 0) => request<AuditLog[]>(`/warehouses/${id}/logs?limit=20&offset=${offset}`),
+  list: (signal: AbortSignal, offset = 0, limit = 20) => request<Warehouse[]>(`/warehouses?limit=${limit}&offset=${offset}`, { signal }),
+  get: (id: number, signal?: AbortSignal) => request<Warehouse>(`/warehouses/${id}`, { signal }),
   create: (data: WarehouseInput) => request<Warehouse>('/warehouses', { method: 'POST', body: JSON.stringify(data) }),
   update: (id: number, data: WarehouseInput) => request<Warehouse>(`/warehouses/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   remove: (id: number) => request<void>(`/warehouses/${id}`, { method: 'DELETE' }),
@@ -86,11 +87,12 @@ export type ShippingAddress = ShippingAddressInput & {
   deleted_at: string | null;
 };
 export const shippingAddressApi = {
-  list: (signal: AbortSignal) => request<ShippingAddress[]>('/shipping-addresses', { signal }),
+  list: (signal: AbortSignal, offset = 0, limit = 20) => request<ShippingAddress[]>(`/shipping-addresses?limit=${limit}&offset=${offset}`, { signal }),
+  get: (id: number, signal?: AbortSignal) => request<ShippingAddress>(`/shipping-addresses/${id}`, { signal }),
   create: (data: ShippingAddressInput) => request<ShippingAddress>('/shipping-addresses', { method: 'POST', body: JSON.stringify(data) }),
   update: (id: number, data: ShippingAddressInput) => request<ShippingAddress>(`/shipping-addresses/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   remove: (id: number) => request<void>(`/shipping-addresses/${id}`, { method: 'DELETE' }),
-  logs: (id: number) => request<AuditLog<ShippingAddress>[]>(`/shipping-addresses/${id}/logs`),
+  logs: (id: number, offset = 0) => request<AuditLog<ShippingAddress>[]>(`/shipping-addresses/${id}/logs?limit=20&offset=${offset}`),
 };
 
 export type ProductInput = {
@@ -106,11 +108,13 @@ export type Product = ProductInput & {
   id: number; created_at: string; updated_at: string; deleted_at: string | null;
 };
 export const productApi = {
-  list: (signal: AbortSignal) => request<Product[]>('/products', { signal }),
+  search: (q: string, offset: number, signal: AbortSignal) => request<Product[]>(`/products?limit=8&offset=${offset}&is_active=true&currency=USD&q=${encodeURIComponent(q)}`, { signal }),
+  list: (signal: AbortSignal, offset = 0, limit = 20) => request<Product[]>(`/products?limit=${limit}&offset=${offset}`, { signal }),
+  get: (id: number, signal?: AbortSignal) => request<Product>(`/products/${id}`, { signal }),
   create: (data: ProductInput) => request<Product>('/products', { method: 'POST', body: JSON.stringify(data) }),
   update: (id: number, data: ProductInput) => request<Product>(`/products/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   remove: (id: number) => request<void>(`/products/${id}`, { method: 'DELETE' }),
-  logs: (id: number) => request<AuditLog<Product>[]>(`/products/${id}/logs`),
+  logs: (id: number, offset = 0) => request<AuditLog<Product>[]>(`/products/${id}/logs?limit=20&offset=${offset}`),
 };
 
 

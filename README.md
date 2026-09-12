@@ -35,3 +35,5 @@ Use `POST /orders` in the API docs to place an order. See [order checkout](docs/
 | `make down` | Stop services; keep database data |
 
 Web changes reload automatically. After API edits, run `docker compose restart api`. After dependency changes, run `make up` to rebuild.
+
+All list endpoints, including admin audit logs, accept `limit` (default 50, maximum 100) and `offset` (default 0). Responses remain arrays. Admin lists show 20 records per page; the order catalog supports paginated name/SKU search.

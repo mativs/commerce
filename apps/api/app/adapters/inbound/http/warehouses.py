@@ -4,7 +4,7 @@ from fastapi import APIRouter, HTTPException, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
-from app.adapters.inbound.http.dependencies import DatabaseSession
+from app.adapters.inbound.http.dependencies import DatabaseSession, PageLimit, PageOffset
 from app.adapters.outbound.geocoding.warehouse_locations import random_warehouse_coordinates
 from app.adapters.outbound.persistence.models import AuditLog, Warehouse
 
@@ -35,10 +35,14 @@ async def find_warehouse(session: DatabaseSession, warehouse_id: int) -> Warehou
 
 
 @router.get("", response_model=list[WarehouseOutput])
-async def list_warehouses(session: DatabaseSession):
+async def list_warehouses(session: DatabaseSession, limit: PageLimit = 50, offset: PageOffset = 0):
     return (
         await session.scalars(
-            select(Warehouse).where(Warehouse.deleted_at.is_(None)).order_by(Warehouse.id)
+            select(Warehouse)
+            .where(Warehouse.deleted_at.is_(None))
+            .order_by(Warehouse.id)
+            .limit(limit)
+            .offset(offset)
         )
     ).all()
 
@@ -90,7 +94,9 @@ class AuditLogOutput(BaseModel):
 
 
 @router.get("/{warehouse_id}/logs", response_model=list[AuditLogOutput])
-async def warehouse_logs(warehouse_id: int, session: DatabaseSession):
+async def warehouse_logs(
+    warehouse_id: int, session: DatabaseSession, limit: PageLimit = 50, offset: PageOffset = 0
+):
     # History remains available after soft deletion.
     if await session.get(Warehouse, warehouse_id) is None:
         raise HTTPException(status_code=404, detail="Warehouse not found.")
@@ -99,5 +105,7 @@ async def warehouse_logs(warehouse_id: int, session: DatabaseSession):
             select(AuditLog)
             .where(AuditLog.table_name == "warehouses", AuditLog.record_id == warehouse_id)
             .order_by(AuditLog.id)
+            .limit(limit)
+            .offset(offset)
         )
     ).all()

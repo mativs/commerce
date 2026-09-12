@@ -1,3 +1,4 @@
+import { Pagination } from '../components/Pagination';
 import { useEffect, useState, type FormEvent } from 'react';
 import { warehouseApi, type Warehouse, type AuditLog } from '../api/client';
 
@@ -12,18 +13,20 @@ export function WarehousesPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [attempt, setAttempt] = useState(0);
-  const [history, setHistory] = useState<{ name: string; logs: AuditLog[] } | null>(null);
+  const [offset, setOffset] = useState(0);
+  const [historyMore, setHistoryMore] = useState(false);
+  const [history, setHistory] = useState<{ id: number; name: string; logs: AuditLog[] } | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
     setError('');
-    warehouseApi.list(controller.signal).then(
-      (items) => { if (!controller.signal.aborted) setWarehouses(items); },
+    warehouseApi.list(controller.signal, offset).then(
+      (items) => { if (!controller.signal.aborted) { setWarehouses(items); if (!items.length && offset > 0) setOffset(Math.max(0, offset - 20)); } },
       (err: unknown) => { if (!controller.signal.aborted) setError(message(err)); },
     ).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [attempt]);
+  }, [attempt, offset]);
 
   function reset() {
     setEditingId(null);
@@ -37,12 +40,10 @@ export function WarehousesPage() {
     setNotice('');
     try {
       const data = { name: form.name.trim() };
-      const saved = editingId === null
-        ? await warehouseApi.create(data)
-        : await warehouseApi.update(editingId, data);
-      setWarehouses((items) => editingId === null
-        ? [...items, saved]
-        : items.map((item) => item.id === saved.id ? saved : item));
+      await (editingId === null
+        ? warehouseApi.create(data)
+        : warehouseApi.update(editingId, data));
+      setAttempt((value) => value + 1);
       setNotice(editingId === null ? 'Warehouse created.' : 'Warehouse updated.');
       setHistory(null);
       reset();
@@ -60,7 +61,7 @@ export function WarehousesPage() {
     setNotice('');
     try {
       await warehouseApi.remove(warehouse.id);
-      setWarehouses((items) => items.filter((item) => item.id !== warehouse.id));
+      setAttempt((value) => value + 1);
       if (editingId === warehouse.id) reset();
       setHistory(null);
       setNotice('Warehouse deleted.');
@@ -111,7 +112,7 @@ export function WarehousesPage() {
                   <button disabled={busy} aria-label={`History for ${warehouse.name}`} onClick={async () => {
                     setBusy(true);
                     setError('');
-                    try { setHistory({ name: warehouse.name, logs: await warehouseApi.logs(warehouse.id) }); }
+                    try { const logs = await warehouseApi.logs(warehouse.id); setHistory({ id: warehouse.id, name: warehouse.name, logs }); setHistoryMore(logs.length === 20); }
                     catch (err) { setError(message(err)); }
                     finally { setBusy(false); }
                   }}>History</button>
@@ -121,6 +122,7 @@ export function WarehousesPage() {
             ))}
           </ul>
         )}
+        <Pagination offset={offset} count={warehouses.length} busy={busy || loading || !!error} onChange={setOffset} />
       </section>
       {history && <section aria-label="Warehouse history">
         <div className="list-heading"><h2>History: {history.name}</h2><button onClick={() => setHistory(null)}>Close</button></div>
@@ -129,6 +131,14 @@ export function WarehousesPage() {
           {log.old_values && <p className="detail">Before: {log.old_values.name} ({log.old_values.latitude}, {log.old_values.longitude})</p>}
           {log.new_values && <p className="detail">After: {log.new_values.name} ({log.new_values.latitude}, {log.new_values.longitude})</p>}
         </li>)}</ol>
+        {historyMore && <button disabled={busy} onClick={async () => {
+          setBusy(true); setError('');
+          try {
+            const logs = await warehouseApi.logs(history.id, history.logs.length);
+            setHistory({ ...history, logs: [...history.logs, ...logs] });
+            setHistoryMore(logs.length === 20);
+          } catch (err) { setError(message(err)); } finally { setBusy(false); }
+        }}>Load more activity</button>}
       </section>}
     </main>
   );

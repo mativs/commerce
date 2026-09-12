@@ -1,3 +1,4 @@
+import { Pagination } from '../components/Pagination';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ApiError, orderApi, productApi, warehouseApi, type Order, type OrderInput, type Product, type ShippingAddressInput, type Warehouse } from '../api/client';
 
@@ -79,6 +80,8 @@ function OrderForm() {
   const [address, setAddress] = useState<ShippingAddressInput>(attempt?.payload.shipping_address || blankAddress);
   const [notes, setNotes] = useState(attempt?.payload.notes || '');
   const [search, setSearch] = useState('');
+  const [searchOffset, setSearchOffset] = useState(0);
+  const [results, setResults] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
   const [catalogError, setCatalogError] = useState('');
   const [error, setError] = useState('');
@@ -87,13 +90,29 @@ function OrderForm() {
   const submitting = useRef(false);
   useEffect(() => {
     const controller = new AbortController(); setLoading(true); setCatalogError('');
-    productApi.list(controller.signal).then((rows) => setProducts(rows.filter((p) => p.is_active && p.currency === 'USD' && !p.deleted_at)))
-      .catch((e) => { if (!controller.signal.aborted) setCatalogError(message(e)); })
-      .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    const timer = window.setTimeout(() => {
+      productApi.search(search, searchOffset, controller.signal).then((rows) => {
+        if (controller.signal.aborted) return;
+        setResults(rows);
+        setProducts((previous) => [...new Map([...previous, ...rows].map((p) => [p.id, p])).values()]);
+      }).catch((e) => { if (!controller.signal.aborted) setCatalogError(message(e)); })
+        .finally(() => { if (!controller.signal.aborted) setLoading(false); });
+    }, 200);
+    return () => { controller.abort(); window.clearTimeout(timer); };
+  }, [reload, search, searchOffset]);
+  useEffect(() => {
+    const controller = new AbortController();
+    const pending = savedAttempt();
+    if (pending) {
+      Promise.allSettled(pending.payload.items.map((i) => productApi.get(i.product_id, controller.signal))).then((responses) => {
+        if (controller.signal.aborted) return;
+        const rows = responses.flatMap((r) => r.status === 'fulfilled' ? [r.value] : []);
+        setProducts((previous) => [...new Map([...previous, ...rows].map((p) => [p.id, p])).values()]);
+      });
+    }
     return () => controller.abort();
-  }, [reload]);
+  }, []);
   const byId = new Map(products.map((p) => [p.id, p]));
-  const results = products.filter((p) => `${p.name} ${p.sku}`.toLowerCase().includes(search.toLowerCase())).slice(0, 8);
   const validItems = items.length > 0 && items.every((i) => /^\d+$/.test(i.quantity) && Number(i.quantity) > 0 && Number(i.quantity) <= 2147483647 && byId.has(i.product_id));
   const total = items.reduce((sum, i) => sum + Number(byId.get(i.product_id)?.price || 0) * (Number(i.quantity) || 0), 0);
   const locked = busy || !!attempt;
@@ -121,8 +140,9 @@ function OrderForm() {
         <section className="orders-panel"><h2><span className="step-number">1</span> Choose your items</h2>
           {catalogError && <p role="alert" className="error">{catalogError} <button type="button" onClick={() => setReload(reload + 1)}>Reload products</button></p>}
           <fieldset disabled={locked || loading}>
-            <label>Find a product<input type="search" placeholder="Search by product name or SKU…" value={search} onChange={(e) => setSearch(e.target.value)} /></label>
-            {loading ? <p role="status">Loading products…</p> : <div className="product-picker">{results.map((p) => <div className="picker-row" key={p.id}><div><strong>{p.name}</strong><small className="block">{p.sku} · {money(p.price)}</small></div><button type="button" aria-label={`Add ${p.name}`} disabled={items.some((i) => i.product_id === p.id)} onClick={() => setItems([...items, { product_id: p.id, quantity: '1' }])}>{items.some((i) => i.product_id === p.id) ? 'Added' : '+ Add'}</button></div>)}{!results.length && <p className="detail">{products.length ? 'No matches. Try a different name or SKU.' : 'No active USD products are available.'}</p>}</div>}
+            <label>Find a product<input type="search" placeholder="Search by product name or SKU…" value={search} onChange={(e) => { setSearch(e.target.value); setSearchOffset(0); }} /></label>
+            {loading ? <p role="status">Loading products…</p> : <div className="product-picker">{results.map((p) => <div className="picker-row" key={p.id}><div><strong>{p.name}</strong><small className="block">{p.sku} · {money(p.price)}</small></div><button type="button" aria-label={`Add ${p.name}`} disabled={items.some((i) => i.product_id === p.id)} onClick={() => setItems([...items, { product_id: p.id, quantity: '1' }])}>{items.some((i) => i.product_id === p.id) ? 'Added' : '+ Add'}</button></div>)}{!results.length && <p className="detail">{search ? 'No matches. Try a different name or SKU.' : 'No products on this page.'}</p>}</div>}
+            <Pagination offset={searchOffset} count={results.length} size={8} busy={locked || loading || !!catalogError} onChange={setSearchOffset} />
             <div className="selected-heading"><h3>Order items <span className="count">{items.length}</span></h3></div>
             {!items.length && <p className="detail">Add products above to start your order.</p>}
             {items.map((item) => <div className="cart-row" key={item.product_id}><div><strong>{byId.get(item.product_id)?.name || `Product #${item.product_id}`}</strong><small className="block">{byId.has(item.product_id) ? `${money(byId.get(item.product_id)!.price)} each` : 'Product currently unavailable'}</small></div><label className="quantity-label">Quantity<input aria-label={`Quantity for ${byId.get(item.product_id)?.name || item.product_id}`} type="number" required min={1} max={2147483647} step={1} value={item.quantity} onChange={(e) => setItems(items.map((i) => i.product_id === item.product_id ? { ...i, quantity: e.target.value } : i))} /></label><button type="button" className="text-button danger" aria-label={`Remove ${byId.get(item.product_id)?.name || item.product_id}`} onClick={() => setItems(items.filter((i) => i.product_id !== item.product_id))}>Remove</button></div>)}
@@ -153,9 +173,16 @@ function OrderDetail({ id }: { id: number }) {
   const [refresh, setRefresh] = useState(0);
   useEffect(() => {
     const controller = new AbortController(); setLoading(true); setError('');
-    orderApi.get(id, controller.signal).then(setOrder).catch((e) => { if (!controller.signal.aborted) setError(message(e)); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
-    productApi.list(controller.signal).then(setProducts).catch(() => { /* IDs remain visible if catalog is unavailable. */ });
-    warehouseApi.list(controller.signal).then(setWarehouses).catch(() => { /* Warehouse ID remains visible. */ });
+    orderApi.get(id, controller.signal).then(async (saved) => {
+      if (controller.signal.aborted) return;
+      setOrder(saved);
+      const responses = await Promise.allSettled(saved.items.map((i) => productApi.get(i.product_id, controller.signal)));
+      if (!controller.signal.aborted) setProducts(responses.flatMap((r) => r.status === 'fulfilled' ? [r.value] : []));
+      if (saved.warehouse_id) {
+        try { const warehouse = await warehouseApi.get(saved.warehouse_id, controller.signal); if (!controller.signal.aborted) setWarehouses([warehouse]); }
+        catch { /* Keep the assigned ID visible when the warehouse is no longer available. */ }
+      }
+    }).catch((e) => { if (!controller.signal.aborted) setError(message(e)); }).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
   }, [id, refresh]);
   const address = order?.shipping_address;

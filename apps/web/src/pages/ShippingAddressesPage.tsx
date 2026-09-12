@@ -1,3 +1,4 @@
+import { Pagination } from '../components/Pagination';
 import { useEffect, useState, type FormEvent } from 'react';
 import { shippingAddressApi, type ShippingAddress, type ShippingAddressInput, type AuditLog } from '../api/client';
 
@@ -26,18 +27,20 @@ export function ShippingAddressesPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const [attempt, setAttempt] = useState(0);
-  const [history, setHistory] = useState<{ name: string; logs: AuditLog<ShippingAddress>[] } | null>(null);
+  const [offset, setOffset] = useState(0);
+  const [historyMore, setHistoryMore] = useState(false);
+  const [history, setHistory] = useState<{ id: number; name: string; logs: AuditLog<ShippingAddress>[] } | null>(null);
 
   useEffect(() => {
     const controller = new AbortController();
     setLoading(true);
     setError('');
-    shippingAddressApi.list(controller.signal).then(
-      (items) => { if (!controller.signal.aborted) setAddresses(items); },
+    shippingAddressApi.list(controller.signal, offset).then(
+      (items) => { if (!controller.signal.aborted) { setAddresses(items); if (!items.length && offset > 0) setOffset(Math.max(0, offset - 20)); } },
       (err: unknown) => { if (!controller.signal.aborted) setError(message(err)); },
     ).finally(() => { if (!controller.signal.aborted) setLoading(false); });
     return () => controller.abort();
-  }, [attempt]);
+  }, [attempt, offset]);
 
   function reset() {
     setEditingId(null);
@@ -56,12 +59,10 @@ export function ShippingAddressesPage() {
         address_line2: form.address_line2.trim() || null,
         delivery_instructions: form.delivery_instructions.trim() || null,
       };
-      const saved = editingId === null
-        ? await shippingAddressApi.create(data)
-        : await shippingAddressApi.update(editingId, data);
-      setAddresses((items) => editingId === null
-        ? [...items, saved]
-        : items.map((item) => item.id === saved.id ? saved : item));
+      await (editingId === null
+        ? shippingAddressApi.create(data)
+        : shippingAddressApi.update(editingId, data));
+      setAttempt((value) => value + 1);
       setNotice(editingId === null ? 'Shipping address created.' : 'Shipping address updated.');
       setHistory(null);
       reset();
@@ -79,7 +80,7 @@ export function ShippingAddressesPage() {
     setNotice('');
     try {
       await shippingAddressApi.remove(address.id);
-      setAddresses((items) => items.filter((item) => item.id !== address.id));
+      setAttempt((value) => value + 1);
       if (editingId === address.id) reset();
       setHistory(null);
       setNotice('Shipping address deleted.');
@@ -153,7 +154,7 @@ export function ShippingAddressesPage() {
                 <button disabled={busy || loading} aria-label={`History for ${address.recipient_name}`} onClick={async () => {
                   setBusy(true);
                   setError('');
-                  try { setHistory({ name: address.recipient_name, logs: await shippingAddressApi.logs(address.id) }); }
+                  try { const logs = await shippingAddressApi.logs(address.id); setHistory({ id: address.id, name: address.recipient_name, logs }); setHistoryMore(logs.length === 20); }
                   catch (err) { setError(message(err)); }
                   finally { setBusy(false); }
                 }}>History</button>
@@ -162,6 +163,7 @@ export function ShippingAddressesPage() {
             </li>)}
           </ul>
         )}
+        <Pagination offset={offset} count={addresses.length} busy={busy || loading || !!error} onChange={setOffset} />
       </section>
       {history && <section aria-label="Shipping address history">
         <div className="list-heading"><h2>History: {history.name}</h2><button onClick={() => setHistory(null)}>Close</button></div>
@@ -170,6 +172,14 @@ export function ShippingAddressesPage() {
           {log.old_values && <div><h3>Before</h3><strong>{log.old_values.recipient_name}</strong><AddressSummary address={log.old_values} /><p className="detail">{log.old_values.latitude}, {log.old_values.longitude}</p></div>}
           {log.new_values && <div><h3>After</h3><strong>{log.new_values.recipient_name}</strong><AddressSummary address={log.new_values} /><p className="detail">{log.new_values.latitude}, {log.new_values.longitude}</p></div>}
         </li>)}</ol>
+        {historyMore && <button disabled={busy} onClick={async () => {
+          setBusy(true); setError('');
+          try {
+            const logs = await shippingAddressApi.logs(history.id, history.logs.length);
+            setHistory({ ...history, logs: [...history.logs, ...logs] });
+            setHistoryMore(logs.length === 20);
+          } catch (err) { setError(message(err)); } finally { setBusy(false); }
+        }}>Load more activity</button>}
       </section>}
     </main>
   );
