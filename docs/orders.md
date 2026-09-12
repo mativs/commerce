@@ -57,13 +57,8 @@ recovery must reconcile payment using the same key before releasing reservations
 Unexpected database errors roll back the current transaction, not earlier committed
 steps. Never blindly cancel a potentially charged order.
 
-The sample migration seeds products and warehouses but no stock. To try successful
-checkout locally, open `make db-shell` and add demo inventory:
-
-```sql
-INSERT INTO stock (warehouse_id, product_id, on_hand, reserved)
-SELECT w.id, p.id, 20, 0
-FROM warehouses w CROSS JOIN products p
-WHERE w.deleted_at IS NULL AND p.deleted_at IS NULL AND p.is_active
-ON CONFLICT (warehouse_id, product_id) DO NOTHING;
-```
+Migration `0010` adds demo stock automatically with `make migrate`. With the original
+five warehouses and 100 active USD products, each warehouse receives 64 different
+products with 5–50 units each and no reservations. Ten products are shared by every
+warehouse; the rest appear in three warehouses, allowing warehouse selection and
+unavailable-order scenarios. Existing stock balances are preserved.
