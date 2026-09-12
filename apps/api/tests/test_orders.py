@@ -199,7 +199,7 @@ def test_payment_does_not_hold_stock_locks_and_no_overselling(checkout):
         release_payment = asyncio.Event()
 
         class BlockingPayment:
-            async def charge(self, amount, *, idempotency_key):
+            async def charge(self, payment, amount, *, idempotency_key):
                 payment_entered.set()
                 await release_payment.wait()
                 return PaymentResult.SUCCEEDED
