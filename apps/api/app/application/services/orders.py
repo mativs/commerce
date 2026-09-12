@@ -1,10 +1,13 @@
 import asyncio
+import logging
 from uuid import uuid4
 
 from app.application.ports.geocoder import Geocoder, GeocodingUnavailable
 from app.application.ports.orders import OrderRepository
 from app.application.ports.payment import PaymentGateway, PaymentResult, PaymentUnavailable
 from app.domain.order import CreateOrder, OrderView, distance_km
+
+logger = logging.getLogger(__name__)
 
 
 class OrderService:
@@ -27,8 +30,11 @@ class OrderService:
             command, order_idempotency_key, payment_idempotency_key
         )
         if not created:
+            logger.info("order.replayed", extra={"order_id": order.id})
             # Replays observe durable state; they never start another payment/booking attempt.
             return order
+
+        logger.info("order.created", extra={"order_id": order.id})
 
         # STEP 2: create or update customer before any fulfillment work.
         if command.customer is not None:
@@ -40,6 +46,9 @@ class OrderService:
                 coordinates = await self.geocoder.geocode(command.shipping_address)
         except (GeocodingUnavailable, TimeoutError):
             await self.repository.cancel(order.id, "GEOCODING_FAILED")
+            logger.warning(
+                "order.cancelled", extra={"order_id": order.id, "outcome": "GEOCODING_FAILED"}
+            )
             return await self.repository.get(order.id)
         await self.repository.locate(order.id, coordinates)
 
@@ -53,6 +62,7 @@ class OrderService:
                 break
         else:
             await self.repository.cancel(order.id, "OUT_OF_STOCK")
+            logger.info("order.cancelled", extra={"order_id": order.id, "outcome": "OUT_OF_STOCK"})
             return await self.repository.get(order.id)
 
         # STEP 5: pay the order
@@ -64,12 +74,20 @@ class OrderService:
                     idempotency_key=payment_idempotency_key,
                 )
         except (PaymentUnavailable, TimeoutError):
+            logger.warning(
+                "order.payment_pending",
+                extra={"order_id": order.id, "outcome": "PAYMENT_UNAVAILABLE"},
+            )
             # Do not release inventory for a payment that may have succeeded.
             return await self.repository.get(order.id)
         payment_result = result.result if hasattr(result, "result") else result
         payment_identifier = getattr(result, "identifier", None)
         if payment_result == PaymentResult.SUCCEEDED:
             await self.repository.pay(order.id, payment_identifier)
+            logger.info("order.paid", extra={"order_id": order.id})
         else:
             await self.repository.cancel(order.id, "PAYMENT_FAILED")
+            logger.warning(
+                "order.cancelled", extra={"order_id": order.id, "outcome": "PAYMENT_FAILED"}
+            )
         return await self.repository.get(order.id)

@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Literal
 from urllib.parse import urlsplit
 
 from pydantic import BeforeValidator, Field, PostgresDsn, field_validator
@@ -16,6 +16,7 @@ class Settings(BaseSettings):
 
     database_url: PostgresDsn
     environment: str = Field(default="development", min_length=1)
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     cors_origins: Annotated[list[str], NoDecode, BeforeValidator(parse_origins)] = []
 
     @field_validator("database_url")

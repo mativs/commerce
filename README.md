@@ -37,3 +37,30 @@ Use `POST /orders` in the API docs to place an order. See [order checkout](docs/
 Web changes reload automatically. After API edits, run `docker compose restart api`. After dependency changes, run `make up` to rebuild.
 
 All list endpoints accept `limit` (default 50, maximum 100) and `offset` (default 0). Responses remain arrays. The order catalog supports paginated name/SKU search.
+
+## Logging
+
+The API writes one JSON object per line to stdout. Use `make api-logs` to follow
+logs locally; production log collectors can ingest the container output directly.
+Set `LOG_LEVEL` to `DEBUG`, `INFO` (default), `WARNING`, `ERROR`, or `CRITICAL`.
+`ENVIRONMENT` is included in every event. Restart the API after configuration changes.
+
+Every HTTP response includes a generated `X-Request-ID` (also exposed through CORS).
+Use it to correlate request events with checkout events. Request logs include the
+method, route template, status and duration in milliseconds; 4xx responses use
+WARNING and 5xx/errors use ERROR. Startup and shutdown are logged too. Uvicorn's
+raw access logs are replaced by these structured request events.
+
+Checkout logs record order creation, replay, payment success, cancellation reason,
+and uncertain payment outcomes (`order.payment_pending`), using order IDs. A pending
+payment warning means the payment attempt failed or timed out and may have succeeded;
+the existing behavior preserves reserved inventory for that order.
+
+Application events omit request/response bodies, query strings, raw URL paths,
+headers, addresses, payment data and idempotency keys. Exceptions include their type
+and stack locations, without exception messages, source lines or local variables.
+When adding logs, use fixed event names and the allowed structured fields in
+`app/infrastructure/logging.py`; never interpolate customer input or credentials.
+Third-party log messages are formatted but are not automatically scrubbed, so review
+any additional library logging before enabling it. Configure retention and rotation
+in the deployment's container runtime or log collector.
