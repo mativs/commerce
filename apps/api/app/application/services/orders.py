@@ -35,6 +35,8 @@ class OrderService:
         else:
             await self.repository.cancel(order.id, "OUT_OF_STOCK")
             return await self.repository.get(order.id)
+        if command.customer is not None:
+            await self.repository.ensure_customer(order.id, command.customer)
         try:
             async with asyncio.timeout(10):
                 charge = self.payment.charge

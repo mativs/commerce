@@ -4,7 +4,7 @@ from decimal import Decimal
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.adapters.inbound.http.dependencies import DatabaseSession, PageLimit, PageOffset
 from app.adapters.inbound.http.shipping_addresses import ShippingAddressInput
@@ -12,6 +12,7 @@ from app.adapters.outbound.persistence.orders import SqlAlchemyOrderRepository
 from app.application.services.orders import OrderService
 from app.domain.order import (
     CreateOrder,
+    CustomerDetails,
     IdempotencyConflict,
     InvalidOrder,
     OrderNotFound,
@@ -29,9 +30,23 @@ class ItemInput(BaseModel):
     quantity: int = Field(gt=0, le=2147483647, strict=True)
 
 
+class CustomerInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+    first_name: str = Field(min_length=1, max_length=100)
+    last_name: str = Field(min_length=1, max_length=100)
+    phone: str = Field(min_length=1, max_length=50)
+    email: str = Field(min_length=3, max_length=254, pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def normalize_email(cls, value: object) -> object:
+        return value.strip().lower() if isinstance(value, str) else value
+
+
 class OrderInput(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
     shipping_address: ShippingAddressInput
+    customer: CustomerInput
     items: list[ItemInput] = Field(min_length=1, max_length=1000)
     notes: str | None = Field(default=None, max_length=2000)
     credit_card_number: str = Field(pattern=r"^\d{13,19}$")
@@ -72,6 +87,7 @@ class OrderOutput(BaseModel):
     failure_reason: str | None
     payment_description: str | None
     payment_identifier: str | None
+    customer: dict | None
     created_at: datetime
     updated_at: datetime
     items: list[ItemOutput]
@@ -106,6 +122,7 @@ async def create_order(
 ):
     command = CreateOrder(
         shipping_address=AddressDetails(**data.shipping_address.model_dump()),
+        customer=CustomerDetails(**data.customer.model_dump()),
         items=tuple(RequestedItem(i.product_id, i.quantity) for i in data.items),
         notes=data.notes,
         payment=PaymentDetails(

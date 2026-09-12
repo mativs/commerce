@@ -102,6 +102,17 @@ class Product(TimestampMixin, Base):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=true())
 
 
+class Customer(TimestampMixin, Base):
+    __tablename__ = "customers"
+    __table_args__ = (CheckConstraint("email = lower(btrim(email))", name="email_normalized"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    first_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    last_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    phone: Mapped[str] = mapped_column(String(50), nullable=False)
+    email: Mapped[str] = mapped_column(String(254), nullable=False, unique=True)
+
+
 class Stock(TimestampMixin, Base):
     """Physical and allocated whole units for one warehouse/product pair."""
 
@@ -153,6 +164,9 @@ class Order(Base):
     payment_description: Mapped[str | None] = mapped_column(String(255))
     credit_card_number: Mapped[str | None] = mapped_column(String(19))
     payment_identifier: Mapped[str | None] = mapped_column(String(128), unique=True)
+    customer_id: Mapped[int | None] = mapped_column(
+        ForeignKey("customers.id", ondelete="RESTRICT"), index=True
+    )
     warehouse_id: Mapped[int | None] = mapped_column(
         ForeignKey("warehouses.id", ondelete="RESTRICT"), index=True
     )

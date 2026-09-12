@@ -8,6 +8,12 @@ are not accepted as input.
 
 ```json
 {
+  "customer": {
+    "first_name": "Ana",
+    "last_name": "Pérez",
+    "phone": "+54 223 555 0100",
+    "email": "ana@example.com"
+  },
   "shipping_address": {
     "recipient_name": "Ana Pérez",
     "address_line1": "San Martín 2500",

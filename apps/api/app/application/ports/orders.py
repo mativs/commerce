@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from app.domain.order import CreateOrder, OrderView, WarehouseCandidate
+from app.domain.order import CreateOrder, CustomerDetails, OrderView, WarehouseCandidate
 from app.domain.shipping_address import Coordinates
 
 
@@ -12,6 +12,8 @@ class OrderRepository(Protocol):
     async def candidates(self, order_id: int) -> list[WarehouseCandidate]: ...
 
     async def reserve(self, order_id: int, warehouse_id: int) -> bool: ...
+
+    async def ensure_customer(self, order_id: int, customer: CustomerDetails) -> None: ...
 
     async def cancel(self, order_id: int, reason: str) -> None: ...
 

@@ -8,6 +8,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.adapters.outbound.persistence.models import (
+    Customer,
     Order,
     OrderItem,
     OrderStatusHistory,
@@ -17,6 +18,7 @@ from app.adapters.outbound.persistence.models import (
 )
 from app.domain.order import (
     CreateOrder,
+    CustomerDetails,
     IdempotencyConflict,
     InvalidOrder,
     OrderItemView,
@@ -71,6 +73,17 @@ class SqlAlchemyOrderRepository:
             failure_reason=row.failure_reason,
             payment_description=row.payment_description,
             payment_identifier=row.payment_identifier,
+            customer=(
+                {
+                    "id": customer.id,
+                    "first_name": customer.first_name,
+                    "last_name": customer.last_name,
+                    "phone": customer.phone,
+                    "email": customer.email,
+                }
+                if (customer := await self.session.get(Customer, row.customer_id)) is not None
+                else None
+            ),
             created_at=row.created_at,
             updated_at=row.updated_at,
             items=[OrderItemView(i.product_id, i.quantity, i.unit_price) for i in items],
@@ -217,6 +230,28 @@ class SqlAlchemyOrderRepository:
             order.warehouse_id = warehouse_id
             order.status = "BOOKED"
             return True
+
+    async def ensure_customer(self, order_id: int, customer: CustomerDetails) -> None:
+        async with self.session.begin():
+            order = await self._order(order_id, lock=True)
+            if order.customer_id is not None:
+                return
+            customer_row = await self.session.scalar(
+                insert(Customer)
+                .values(
+                    first_name=customer.first_name,
+                    last_name=customer.last_name,
+                    phone=customer.phone,
+                    email=customer.email,
+                )
+                .on_conflict_do_nothing(index_elements=[Customer.email])
+                .returning(Customer.id)
+            )
+            if customer_row is None:
+                customer_row = await self.session.scalar(
+                    select(Customer.id).where(Customer.email == customer.email).with_for_update()
+                )
+            order.customer_id = customer_row
 
     async def cancel(self, order_id: int, reason: str) -> None:
         async with self.session.begin():

@@ -11,7 +11,7 @@ from test_shipping_addresses import ADDRESS
 from app.adapters.outbound.persistence.models import Product, Stock, Warehouse
 from app.adapters.outbound.persistence.orders import SqlAlchemyOrderRepository
 from app.application.ports.geocoder import GeocodingUnavailable
-from app.application.ports.payment import PaymentResult, PaymentUnavailable
+from app.application.ports.payment import PaymentResponse, PaymentResult, PaymentUnavailable
 from app.application.services.orders import OrderService
 from app.domain.order import CreateOrder, RequestedItem, distance_km
 from app.domain.shipping_address import AddressDetails, Coordinates
@@ -26,7 +26,9 @@ def checkout(order_models, database_client):
         latitude=-38, longitude=-57.57
     )
     client.app.state.payment_gateway = AsyncMock()
-    client.app.state.payment_gateway.charge.return_value = PaymentResult.SUCCEEDED
+    client.app.state.payment_gateway.charge.return_value = PaymentResponse(
+        PaymentResult.SUCCEEDED, "pay_test_success"
+    )
 
     async def setup():
         async with sessions() as session, session.begin():
@@ -53,6 +55,12 @@ def checkout(order_models, database_client):
 
     products, warehouses = asyncio.run(setup())
     body = {
+        "customer": {
+            "first_name": "Ana",
+            "last_name": "Perez",
+            "phone": "+54 223 555 0100",
+            "email": "ana@example.com",
+        },
         "shipping_address": ADDRESS,
         "items": [{"product_id": p, "quantity": 2} for p in products],
         "credit_card_number": "4242424242424242",
@@ -81,6 +89,7 @@ def test_checkout_snapshots_duplicates_history_and_replay(checkout):
     assert order["status"] == "PAID" and order["warehouse_id"] == warehouses[0]
     assert order["payment_description"] == "Demo checkout"
     assert order["payment_identifier"].startswith("pay_")
+    assert order["customer"]["email"] == "ana@example.com"
     assert order["total_amount"] == "74.04"
     assert [i["quantity"] for i in order["items"]] == [4, 2]
     assert [h["status"] for h in order["history"]] == ["CREATED", "BOOKED", "PAID"]

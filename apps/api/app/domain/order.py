@@ -19,6 +19,14 @@ class PaymentDetails:
 
 
 @dataclass(frozen=True)
+class CustomerDetails:
+    first_name: str
+    last_name: str
+    phone: str
+    email: str
+
+
+@dataclass(frozen=True)
 class CreateOrder:
     shipping_address: AddressDetails
     items: tuple[RequestedItem, ...]
@@ -26,6 +34,7 @@ class CreateOrder:
     payment: PaymentDetails = field(
         default_factory=lambda: PaymentDetails(credit_card_number="", description="")
     )
+    customer: CustomerDetails | None = None
 
 
 @dataclass(frozen=True)
@@ -61,6 +70,7 @@ class OrderView:
     failure_reason: str | None
     payment_description: str | None
     payment_identifier: str | None
+    customer: dict | None
     created_at: datetime
     updated_at: datetime
     items: list[OrderItemView]
