@@ -14,6 +14,12 @@ class OrderService:
         self.geocoder = geocoder
         self.payment = payment
 
+    async def list(self, limit: int, offset: int) -> list[OrderView]:
+        return await self.repository.list(limit, offset)
+
+    async def get(self, order_id: int) -> OrderView:
+        return await self.repository.get(order_id)
+
     async def create(self, command: CreateOrder, order_idempotency_key: str) -> OrderView:
         payment_idempotency_key = f"payment:{uuid4()}"
         order, created = await self.repository.create(

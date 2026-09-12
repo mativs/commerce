@@ -2,10 +2,13 @@ from datetime import datetime
 
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import select
 
-from app.adapters.inbound.http.dependencies import DatabaseSession, PageLimit, PageOffset
-from app.adapters.outbound.persistence.models import Warehouse
+from app.adapters.inbound.http.dependencies import (
+    PageLimit,
+    PageOffset,
+    WarehouseServiceDependency,
+)
+from app.domain.warehouses import WarehouseNotFound
 
 router = APIRouter(prefix="/warehouses", tags=["warehouses"])
 
@@ -26,26 +29,16 @@ class WarehouseOutput(WarehouseInput):
     deleted_at: datetime | None
 
 
-async def find_warehouse(session: DatabaseSession, warehouse_id: int) -> Warehouse:
-    warehouse = await session.get(Warehouse, warehouse_id)
-    if warehouse is None or warehouse.deleted_at is not None:
-        raise HTTPException(status_code=404, detail="Warehouse not found.")
-    return warehouse
-
-
 @router.get("", response_model=list[WarehouseOutput])
-async def list_warehouses(session: DatabaseSession, limit: PageLimit = 50, offset: PageOffset = 0):
-    return (
-        await session.scalars(
-            select(Warehouse)
-            .where(Warehouse.deleted_at.is_(None))
-            .order_by(Warehouse.id)
-            .limit(limit)
-            .offset(offset)
-        )
-    ).all()
+async def list_warehouses(
+    service: WarehouseServiceDependency, limit: PageLimit = 50, offset: PageOffset = 0
+):
+    return await service.list(limit, offset)
 
 
 @router.get("/{warehouse_id}", response_model=WarehouseOutput)
-async def get_warehouse(warehouse_id: int, session: DatabaseSession):
-    return await find_warehouse(session, warehouse_id)
+async def get_warehouse(warehouse_id: int, service: WarehouseServiceDependency):
+    try:
+        return await service.get(warehouse_id)
+    except WarehouseNotFound as error:
+        raise HTTPException(status_code=404, detail="Warehouse not found.") from error

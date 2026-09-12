@@ -3,12 +3,14 @@ from datetime import datetime
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
+from fastapi import APIRouter, Header, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.adapters.inbound.http.dependencies import DatabaseSession, PageLimit, PageOffset
-from app.adapters.outbound.persistence.orders import SqlAlchemyOrderRepository
-from app.application.services.orders import OrderService
+from app.adapters.inbound.http.dependencies import (
+    OrderServiceDependency,
+    PageLimit,
+    PageOffset,
+)
 from app.domain.order import (
     CreateOrder,
     CustomerDetails,
@@ -117,15 +119,7 @@ class OrderOutput(BaseModel):
     history: list[HistoryOutput]
 
 
-def order_service(request: Request, session: DatabaseSession) -> OrderService:
-    return OrderService(
-        SqlAlchemyOrderRepository(session),
-        request.app.state.order_geocoder,
-        request.app.state.payment_gateway,
-    )
-
-
-Service = Annotated[OrderService, Depends(order_service)]
+Service = OrderServiceDependency
 
 
 @router.post(
@@ -171,12 +165,12 @@ async def list_orders(
     limit: PageLimit = 50,
     offset: PageOffset = 0,
 ):
-    return [asdict(order) for order in await service.repository.list(limit, offset)]
+    return [asdict(order) for order in await service.list(limit, offset)]
 
 
 @router.get("/{order_id}", response_model=OrderOutput)
 async def get_order(order_id: int, service: Service):
     try:
-        return asdict(await service.repository.get(order_id))
+        return asdict(await service.get(order_id))
     except OrderNotFound as error:
         raise HTTPException(status_code=404, detail="Order not found.") from error
