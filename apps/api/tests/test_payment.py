@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 from app.adapters.outbound.payments.mock import MockPaymentGateway
 from app.application.ports.payment import PaymentResult
+from app.domain.order import PaymentDetails
 
 
 def test_mock_payment_delay_idempotency_and_outcomes():
@@ -15,9 +16,10 @@ def test_mock_payment_delay_idempotency_and_outcomes():
             outcomes = []
             for number in range(20):
                 key = f"order:{number}"
-                result = await gateway.charge(Decimal("12.34"), idempotency_key=key)
+                payment = PaymentDetails(credit_card_number="4111111111111111", description="test")
+                result = await gateway.charge(payment, Decimal("12.34"), idempotency_key=key)
                 assert result == await MockPaymentGateway().charge(
-                    Decimal("12.34"), idempotency_key=key
+                    payment, Decimal("12.34"), idempotency_key=key
                 )
                 outcomes.append(result.result)
             assert set(outcomes) == {PaymentResult.SUCCEEDED, PaymentResult.DECLINED}

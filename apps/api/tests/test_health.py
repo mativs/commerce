@@ -6,7 +6,7 @@ from app.main import create_app
 
 def test_health() -> None:
     settings = Settings(
-        _env_file=None,
+        _env_file=None,  # pyright: ignore[reportCallIssue]
         database_url="postgresql+asyncpg://test:test@localhost/test",
         cors_origins=["http://localhost:5173"],
     )

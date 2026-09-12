@@ -17,7 +17,8 @@ from app.main import create_app
 def database_client():
     if not os.environ.get("DATABASE_URL"):
         pytest.skip("PostgreSQL DATABASE_URL required; run make test")
-    settings = Settings()
+    # Pyright cannot infer values supplied by Pydantic Settings from the environment.
+    settings = Settings()  # pyright: ignore[reportCallIssue]
     schema = f"test_crud_{uuid4().hex}"
     engine = create_async_engine(str(settings.database_url), poolclass=NullPool)
 

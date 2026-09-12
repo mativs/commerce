@@ -22,6 +22,8 @@ def stock_data(database_client):
         )
         path = Path(__file__).parents[1] / "migrations/versions/0006_stock.py"
         spec = importlib.util.spec_from_file_location("stock_migration", path)
+        if spec is None or spec.loader is None:
+            raise ImportError(f"Unable to load migration: {path}")
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
         # Run the real migration in the fixture's isolated schema, including FKs.
@@ -29,6 +31,8 @@ def stock_data(database_client):
             module.upgrade()
             path = Path(__file__).parents[1] / "migrations/versions/0016_remove_stock_deleted_at.py"
             spec = importlib.util.spec_from_file_location("remove_stock_deleted_at", path)
+            if spec is None or spec.loader is None:
+                raise ImportError(f"Unable to load migration: {path}")
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             module.upgrade()

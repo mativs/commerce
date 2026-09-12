@@ -11,6 +11,8 @@ from test_seed_migration import apply_seed
 def run_migration(connection, filename):
     path = Path(__file__).parents[1] / "migrations/versions" / filename
     spec = importlib.util.spec_from_file_location("stock_seed_migration", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Unable to load migration: {path}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     with Operations.context(MigrationContext.configure(connection)):

@@ -12,7 +12,7 @@ from app.adapters.outbound.persistence.orders import SqlAlchemyOrderRepository
 from app.application.ports.geocoder import GeocodingUnavailable
 from app.application.ports.payment import PaymentResponse, PaymentResult, PaymentUnavailable
 from app.application.services.orders import OrderService
-from app.domain.order import CreateOrder, RequestedItem, distance_km
+from app.domain.order import CreateOrder, PaymentDetails, RequestedItem, distance_km
 from app.domain.shipping import AddressDetails, Coordinates
 
 ADDRESS = {
@@ -199,10 +199,12 @@ def test_payment_does_not_hold_stock_locks_and_no_overselling(checkout):
         release_payment = asyncio.Event()
 
         class BlockingPayment:
-            async def charge(self, payment, amount, *, idempotency_key):
+            async def charge(
+                self, payment: PaymentDetails, amount: Decimal, *, idempotency_key: str
+            ) -> PaymentResponse:
                 payment_entered.set()
                 await release_payment.wait()
-                return PaymentResult.SUCCEEDED
+                return PaymentResponse(PaymentResult.SUCCEEDED)
 
         command = CreateOrder(
             AddressDetails(**{**ADDRESS, "country_code": "AR"}),

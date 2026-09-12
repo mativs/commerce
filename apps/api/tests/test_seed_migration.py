@@ -16,6 +16,8 @@ from app.adapters.outbound.persistence.models import Product
 def load_seed():
     path = Path(__file__).parents[1] / "migrations/versions/0005_seed_demo_data.py"
     spec = importlib.util.spec_from_file_location("seed_demo_data", path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Unable to load migration: {path}")
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
     return module
@@ -26,6 +28,8 @@ async def apply_seed(sessions):
         with Operations.context(MigrationContext.configure(connection)):
             path = Path(__file__).parents[1] / "migrations/versions/0003_shipping_addresses.py"
             spec = importlib.util.spec_from_file_location("addresses", path)
+            if spec is None or spec.loader is None:
+                raise ImportError(f"Unable to load migration: {path}")
             module = importlib.util.module_from_spec(spec)
             spec.loader.exec_module(module)
             with patch.object(module.op, "execute"):

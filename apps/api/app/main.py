@@ -15,7 +15,8 @@ from app.infrastructure.database import create_engine, create_session_maker
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
-    settings = settings if settings is not None else Settings()
+    # Pyright cannot infer values supplied by Pydantic Settings from the environment.
+    settings = settings if settings is not None else Settings()  # pyright: ignore[reportCallIssue]
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:

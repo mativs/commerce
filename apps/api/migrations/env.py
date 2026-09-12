@@ -8,7 +8,8 @@ from app.adapters.outbound.persistence.models import Base
 from app.infrastructure.config import Settings
 
 target_metadata = Base.metadata
-database_url = str(Settings().database_url)
+# Pyright cannot infer values supplied by Pydantic Settings from the environment.
+database_url = str(Settings().database_url)  # pyright: ignore[reportCallIssue]
 
 
 def run_migrations(connection: Connection) -> None:
