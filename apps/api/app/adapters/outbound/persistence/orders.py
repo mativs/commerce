@@ -3,7 +3,7 @@ import json
 from dataclasses import asdict
 from decimal import Decimal
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -158,34 +158,38 @@ class SqlAlchemyOrderRepository:
 
     async def candidates(self, order_id: int) -> list[WarehouseCandidate]:
         async with self.session.begin():
-            items = await self._items(order_id)
-            quantities = {i.product_id: i.quantity for i in items}
-            rows = (
-                await self.session.execute(
-                    select(Warehouse, Stock.product_id, Stock.on_hand, Stock.reserved)
+            required_products = (
+                select(func.count())
+                .select_from(OrderItem)
+                .where(OrderItem.order_id == order_id)
+                .scalar_subquery()
+            )
+            warehouses = list(
+                await self.session.scalars(
+                    select(Warehouse)
                     .join(Stock, Stock.warehouse_id == Warehouse.id)
+                    .join(
+                        OrderItem,
+                        (OrderItem.product_id == Stock.product_id)
+                        & (OrderItem.order_id == order_id),
+                    )
                     .where(
                         Warehouse.deleted_at.is_(None),
                         Stock.deleted_at.is_(None),
-                        Stock.product_id.in_(quantities),
+                        Stock.on_hand - Stock.reserved >= OrderItem.quantity,
                     )
+                    .group_by(Warehouse.id)
+                    .having(func.count(func.distinct(Stock.product_id)) == required_products)
                 )
-            ).all()
-            eligible: dict[int, set[int]] = {}
-            warehouses: dict[int, Warehouse] = {}
-            for warehouse, product_id, on_hand, reserved in rows:
-                warehouses[warehouse.id] = warehouse
-                if on_hand - reserved >= quantities[product_id]:
-                    eligible.setdefault(warehouse.id, set()).add(product_id)
+            )
             return [
                 WarehouseCandidate(
-                    wid,
+                    warehouse.id,
                     Coordinates(
-                        latitude=warehouses[wid].latitude, longitude=warehouses[wid].longitude
+                        latitude=warehouse.latitude, longitude=warehouse.longitude
                     ),
                 )
-                for wid, products in eligible.items()
-                if len(products) == len(quantities)
+                for warehouse in warehouses
             ]
 
     async def reserve(self, order_id: int, warehouse_id: int) -> bool:
