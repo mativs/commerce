@@ -15,9 +15,6 @@ class MockPaymentGateway:
         idempotency_key: str,
     ) -> PaymentResponse:
         await asyncio.sleep(2)
-        # A stable pseudo-random result models provider idempotency, including after restart.
-        rejected = int.from_bytes(sha256(idempotency_key.encode()).digest()) % 5 == 0
-        if rejected:
-            return PaymentResponse(PaymentResult.DECLINED)
+        # Keep the provider reference stable across retries and restarts.
         identifier = f"pay_{sha256(idempotency_key.encode()).hexdigest()[:32]}"
         return PaymentResponse(PaymentResult.SUCCEEDED, identifier)

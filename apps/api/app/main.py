@@ -46,7 +46,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             headers={"X-Request-ID": request.state.request_id},
         )
 
-    app.state.order_geocoder = MockGeocoder(simulate_failures=True)
+    app.state.order_geocoder = MockGeocoder()
     app.state.payment_gateway = MockPaymentGateway()
     app.add_middleware(
         CORSMiddleware,

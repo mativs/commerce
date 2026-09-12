@@ -10,6 +10,7 @@ from app.adapters.outbound.persistence.warehouses import SqlAlchemyWarehouseRepo
 from app.application.services.orders import OrderService
 from app.application.services.products import ProductService
 from app.application.services.warehouses import WarehouseService
+from app.infrastructure.order_simulation import SimulatedOrderService
 
 
 async def get_session(request: Request) -> AsyncIterator[AsyncSession]:
@@ -22,7 +23,7 @@ DatabaseSession = Annotated[AsyncSession, Depends(get_session)]
 
 
 def order_service(request: Request, session: DatabaseSession) -> OrderService:
-    return OrderService(
+    return SimulatedOrderService(
         SqlAlchemyOrderRepository(session),
         request.app.state.order_geocoder,
         request.app.state.payment_gateway,

@@ -8,7 +8,6 @@ from app.adapters.outbound.geocoding.sample_locations import (
     MAR_DEL_PLATA_LOCATIONS,
     random_mar_del_plata_coordinates,
 )
-from app.application.ports.geocoder import GeocodingUnavailable
 from app.domain.shipping import AddressDetails, Coordinates
 
 DETAILS = AddressDetails(
@@ -40,11 +39,3 @@ def test_mock_pool_and_selection():
 def test_invalid_provider_coordinates_rejected(latitude, longitude):
     with pytest.raises(ValueError):
         Coordinates(latitude=latitude, longitude=longitude)
-
-
-def test_failures_are_only_enabled_for_checkout():
-    with patch("app.adapters.outbound.geocoding.mock.randbelow", return_value=0):
-        coordinates = asyncio.run(MockGeocoder().geocode(DETAILS))
-        assert (coordinates.latitude, coordinates.longitude) in MAR_DEL_PLATA_LOCATIONS
-        with pytest.raises(GeocodingUnavailable):
-            asyncio.run(MockGeocoder(simulate_failures=True).geocode(DETAILS))

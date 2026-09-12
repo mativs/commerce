@@ -55,12 +55,9 @@ it and records cancellation in one transaction. Status history is written by the
 existing database trigger, with a reason for cancellation.
 
 Shipping details belong to the order snapshot; there is no separate saved-address model or CRUD.
-Checkout uses a separate mock instance so its simulated failures do not affect other API operations.
-
-Both external services use async ports and mock outbound adapters. Checkout geocoding fails
-with probability 1/5. Payment waits two seconds and uses a stable pseudo-random
-outcome with approximately 1/5 declines, keyed by the idempotency key so retries do
-not change its outcome. No real payment is made.
+Both external services use async ports and mock outbound adapters. Geocoding returns a sample Mar del Plata location. Payment waits two seconds
+and always succeeds, with a stable provider reference keyed by the idempotency key
+so retries return the same reference. No real payment is made.
 
 There is no recovery worker yet. A crash after creation can leave `CREATED`; a crash
 or unknown payment outcome after reservation can leave `BOOKED`. Reusing the POST
@@ -74,3 +71,27 @@ five warehouses and 100 active USD products, each warehouse receives 64 differen
 products with 5–50 units each and no reservations. Ten products are shared by every
 warehouse; the rest appear in three warehouses, allowing warehouse selection and
 unavailable-order scenarios. Existing stock balances are preserved.
+
+
+### Simulating failures
+
+Simulations are always enabled for this exercise. Include a plain keyword anywhere
+in order notes (for example, `Please test payment-declined`). Matching ignores case
+and requires a complete keyword; if several appear, the first one wins.
+
+| Keyword | Result |
+| --- | --- |
+| `geocoding-timeout` | Cancelled with `GEOCODING_FAILED`; no payment attempted. |
+| `payment-declined` | Cancelled with `PAYMENT_FAILED`; reserved stock released. |
+| `payment-timeout` | Remains `BOOKED` (HTTP 202); reserved stock retained. |
+| `payment-failed` | Provider unavailable; remains `BOOKED` (HTTP 202), stock retained. |
+
+Without a recognized keyword, mock payments succeed. Timeout markers raise the
+same exception handled by the service immediately, without waiting ten seconds.
+An unavailable provider has an unknown payment outcome, so it cannot safely cancel
+the order. Out-of-stock and reservation failures use actual inventory conditions.
+
+`app/infrastructure/order_simulation.py` composes per-invocation adapter wrappers,
+wired in the HTTP dependency factory. The order service and SQL repository contain
+no simulation logic. Notes remain saved on the order; retries with the same
+idempotency key observe the saved result without rerunning the scenario.

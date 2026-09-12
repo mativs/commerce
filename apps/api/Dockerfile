@@ -15,5 +15,6 @@ CMD ["uvicorn", "app.main:create_app", "--factory", "--host", "0.0.0.0", "--port
 FROM base AS development
 RUN uv sync --frozen --no-install-project
 COPY tests ./tests
+CMD ["uvicorn", "app.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/app"]
 
 FROM base AS production

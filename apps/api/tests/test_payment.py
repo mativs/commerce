@@ -7,7 +7,7 @@ from app.application.ports.payment import PaymentResult
 from app.domain.order import PaymentDetails
 
 
-def test_mock_payment_delay_idempotency_and_outcomes():
+def test_mock_payment_always_succeeds_with_delay_and_stable_reference():
     async def check():
         with patch(
             "app.adapters.outbound.payments.mock.asyncio.sleep", new_callable=AsyncMock
@@ -22,7 +22,7 @@ def test_mock_payment_delay_idempotency_and_outcomes():
                     payment, Decimal("12.34"), idempotency_key=key
                 )
                 outcomes.append(result.result)
-            assert set(outcomes) == {PaymentResult.SUCCEEDED, PaymentResult.DECLINED}
+            assert set(outcomes) == {PaymentResult.SUCCEEDED}
             assert sleep.await_count == 40
             sleep.assert_awaited_with(2)
 

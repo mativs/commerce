@@ -338,7 +338,7 @@ def test_missing_stock_cannot_partially_book(checkout):
     async def remove_stock():
         async with sessions() as session, session.begin():
             await session.execute(
-        text("UPDATE stock SET on_hand=0, reserved=0 WHERE product_id=:pid"),
+                text("UPDATE stock SET on_hand=0, reserved=0 WHERE product_id=:pid"),
                 {"pid": body["items"][0]["product_id"]},
             )
 
@@ -346,3 +346,63 @@ def test_missing_stock_cannot_partially_book(checkout):
     order = client.post("/orders", json=body, headers={"Idempotency-Key": "missing"}).json()
     assert order["failure_reason"] == "OUT_OF_STOCK"
     assert sum(s[3] for s in stock_rows(sessions)) == 0
+
+
+@pytest.mark.parametrize(
+    "notes,status,reason,reserved,http_status",
+    [
+        ("Please test geocoding-timeout today", "CANCELLED", "GEOCODING_FAILED", 0, 201),
+        ("payment-declined", "CANCELLED", "PAYMENT_FAILED", 0, 201),
+        ("payment-timeout", "BOOKED", None, 4, 202),
+        ("payment-failed", "BOOKED", None, 4, 202),
+        (None, "PAID", None, 4, 201),
+        ("Leave at the door", "PAID", None, 4, 201),
+        ("not-payment-failed", "PAID", None, 4, 201),
+        ("PAYMENT-DECLINED", "CANCELLED", "PAYMENT_FAILED", 0, 201),
+        ("payment-declined geocoding-timeout", "CANCELLED", "PAYMENT_FAILED", 0, 201),
+    ],
+)
+def test_note_simulations_and_replay(checkout, notes, status, reason, reserved, http_status):
+    client, sessions, body, _ = checkout
+    body["notes"] = notes
+    response = client.post("/orders", json=body, headers={"Idempotency-Key": "scenario"})
+    assert response.status_code == http_status, response.text
+    order = response.json()
+    assert order["status"] == status
+    assert order["failure_reason"] == reason
+    assert order["notes"] == notes
+    assert order["history"][-1]["status"] == status
+    assert sum(s[3] for s in stock_rows(sessions)) == reserved
+    assert (
+        client.post("/orders", json=body, headers={"Idempotency-Key": "scenario"}).json() == order
+    )
+    assert sum(s[3] for s in stock_rows(sessions)) == reserved
+    if status != "PAID":
+        client.app.state.payment_gateway.charge.assert_not_awaited()
+    # A later ordinary checkout must not inherit another request's simulation.
+    body["notes"] = "Normal checkout"
+    client.app.state.payment_gateway.charge.return_value = PaymentResponse(
+        PaymentResult.SUCCEEDED, "pay_second_success"
+    )
+    normal = client.post("/orders", json=body, headers={"Idempotency-Key": "normal"})
+    assert normal.status_code == 201, normal.text
+    assert normal.json()["status"] == "PAID"
+
+
+def test_concurrent_note_simulations_are_isolated(checkout):
+    client, sessions, body, _ = checkout
+    notes = ["geocoding-timeout", "payment-declined", "payment-failed", "Normal checkout"]
+
+    def submit(note):
+        return client.post(
+            "/orders",
+            json={**body, "notes": note},
+            headers={"Idempotency-Key": note.replace(" ", "-")},
+        )
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        responses = list(pool.map(submit, notes))
+    assert [r.status_code for r in responses] == [201, 201, 202, 201]
+    assert [r.json()["status"] for r in responses] == ["CANCELLED", "CANCELLED", "BOOKED", "PAID"]
+    assert sum(s[3] for s in stock_rows(sessions)) == 8
+    client.app.state.payment_gateway.charge.assert_awaited_once()
