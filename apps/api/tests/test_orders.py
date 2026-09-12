@@ -141,6 +141,7 @@ def test_failures_are_durable(checkout, failure, reason, history, reserved):
     response = client.post("/orders", json=body, headers={"Idempotency-Key": failure})
     assert response.status_code == (202 if failure == "unknown" else 201), response.text
     order = response.json()
+    assert order["customer"]["email"] == "ana@example.com"
     assert [h["status"] for h in order["history"]] == history
     assert order["failure_reason"] == reason
     assert order["history"][-1]["reason"] == reason
