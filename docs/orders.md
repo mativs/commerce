@@ -51,7 +51,7 @@ reserved physical inventory until a future shipment. A definitive rejection rele
 it and records cancellation in one transaction. Status history is written by the
 existing database trigger, with a reason for cancellation.
 
-Admin shipping-address CRUD still geocodes addresses on creation and location changes.
+Shipping details belong to the order snapshot; there is no separate saved-address model or CRUD.
 Checkout uses a separate mock instance so its simulated failures do not affect admin CRUD.
 
 Both external services use async ports and mock outbound adapters. Checkout geocoding fails

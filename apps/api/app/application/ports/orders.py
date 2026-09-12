@@ -1,7 +1,7 @@
 from typing import Protocol
 
 from app.domain.order import CreateOrder, CustomerDetails, OrderView, WarehouseCandidate
-from app.domain.shipping_address import Coordinates
+from app.domain.shipping import Coordinates
 
 
 class OrderRepository(Protocol):

@@ -11,11 +11,11 @@ from app.adapters.outbound.persistence.models import Order, OrderItem, Product
 
 @pytest.fixture
 def item_data(order_models):
-    sessions, address_id = order_models
+    sessions = order_models
 
     async def setup():
         async with sessions() as session, session.begin():
-            order = Order(shipping_address_id=address_id)
+            order = Order()
             product = Product(
                 name="Snapshot test", sku="ITEM-TEST", price=Decimal("12.34"), currency="USD"
             )

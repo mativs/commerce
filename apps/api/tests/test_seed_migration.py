@@ -1,6 +1,7 @@
 import asyncio
 import importlib.util
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from alembic.migration import MigrationContext
@@ -22,6 +23,12 @@ def load_seed():
 async def apply_seed(sessions):
     def upgrade(connection):
         with Operations.context(MigrationContext.configure(connection)):
+            path = Path(__file__).parents[1] / "migrations/versions/0003_shipping_addresses.py"
+            spec = importlib.util.spec_from_file_location("addresses", path)
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            with patch.object(module.op, "execute"):
+                module.upgrade()
             load_seed().upgrade()
 
     async with sessions() as session, session.begin():
@@ -33,11 +40,10 @@ def test_seed_data_and_audit(database_client):
     client, sessions = database_client
     asyncio.run(apply_seed(sessions))
     warehouses = client.get("/warehouses").json()
-    addresses = client.get("/shipping-addresses").json()
     response = client.get("/products?limit=100")
     assert response.status_code == 200
     products = response.json()
-    assert len(warehouses) == 5 and len(addresses) == 5 and len(products) == 100
+    assert len(warehouses) == 5 and len(products) == 100
     expected = {row["sku"]: row for row in load_seed().product_rows()}
     for product in products:
         row = expected[product["sku"]]
@@ -46,12 +52,8 @@ def test_seed_data_and_audit(database_client):
         assert product["ean"] == validate_ean(row["ean"])
         assert product["currency"] == "USD" and product["is_active"] is True
     assert len({product["ean"] for product in products}) == 100
-    assert {(w["latitude"], w["longitude"]) for w in warehouses}.isdisjoint(
-        {(a["latitude"], a["longitude"]) for a in addresses}
-    )
     for path, records in [
         ("warehouses", warehouses),
-        ("shipping-addresses", addresses),
         ("products", products),
     ]:
         for record in records:
@@ -75,7 +77,6 @@ def test_seed_conflict_is_atomic(database_client):
     with pytest.raises(IntegrityError):
         asyncio.run(apply_seed(sessions))
     assert client.get("/warehouses").json() == []
-    assert client.get("/shipping-addresses").json() == []
     assert client.get("/products?limit=100").json() == [existing.json()]
 
     async def count_logs():

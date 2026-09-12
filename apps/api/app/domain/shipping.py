@@ -1,5 +1,4 @@
 from dataclasses import dataclass
-from datetime import datetime
 
 
 @dataclass(frozen=True, kw_only=True)
@@ -23,28 +22,3 @@ class AddressDetails:
     phone: str | None = None
     address_line2: str | None = None
     delivery_instructions: str | None = None
-
-    @property
-    def location_key(self) -> tuple[str | None, ...]:
-        return (
-            self.address_line1,
-            self.address_line2,
-            self.city,
-            self.state,
-            self.postal_code,
-            self.country_code,
-        )
-
-
-@dataclass(frozen=True, kw_only=True)
-class ShippingAddress:
-    id: int
-    details: AddressDetails
-    coordinates: Coordinates | None
-    created_at: datetime
-    updated_at: datetime
-    deleted_at: datetime | None
-
-
-class ShippingAddressNotFound(Exception):
-    pass

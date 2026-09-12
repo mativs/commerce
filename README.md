@@ -12,15 +12,15 @@ make up
 make migrate
 ```
 
-The migrations also add 5 warehouses, 5 sample shipping addresses, and 100 products priced in USD, with varied stock across warehouses.
+The migrations also add 5 warehouses and 100 products priced in USD, with varied stock across warehouses.
 
 ## Usage
 
 - Open the [web app](http://localhost:5173) to create orders, edit items before checkout, enter shipping details, and view order results.
-- Use the Admin tab to manage warehouses, shipping addresses, and products.
+- Use the Admin tab to manage warehouses and products.
 - Use the [API docs](http://localhost:8000/docs) to explore and try the endpoints.
 
-Warehouse and admin shipping-address coordinates use mock locations in Mar del Plata. Order checkout also geocodes its own address snapshot. Deleted admin records retain their audit history.
+Warehouse coordinates use mock locations in Mar del Plata. Order checkout geocodes its own address snapshot. Deleted admin records retain their audit history.
 
 Use `POST /orders` in the API docs to place an order. See [order checkout](docs/orders.md) for the request, demo stock setup, and retry behavior.
 

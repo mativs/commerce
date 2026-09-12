@@ -2,7 +2,6 @@ import asyncio
 
 import pytest
 from sqlalchemy import text
-from test_shipping_addresses import ADDRESS
 
 
 @pytest.mark.parametrize(
@@ -13,7 +12,6 @@ from test_shipping_addresses import ADDRESS
             "products",
             {"name": "Pagination product", "sku": "PAGE", "price": "1.00", "currency": "USD"},
         ),
-        ("shipping-addresses", ADDRESS),
     ],
 )
 def test_pages_and_logs(database_client, path, payload):

@@ -62,27 +62,6 @@ class AuditLog(TimestampMixin, Base):
     new_values: Mapped[dict | None] = mapped_column(JSONB)
 
 
-class ShippingAddress(TimestampMixin, Base):
-    __tablename__ = "shipping_addresses"
-    __table_args__ = (
-        CheckConstraint("latitude BETWEEN -90 AND 90", name="latitude_range"),
-        CheckConstraint("longitude BETWEEN -180 AND 180", name="longitude_range"),
-    )
-
-    id: Mapped[int] = mapped_column(primary_key=True)
-    recipient_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    phone: Mapped[str | None] = mapped_column(String(50))
-    address_line1: Mapped[str] = mapped_column(String(255), nullable=False)
-    address_line2: Mapped[str | None] = mapped_column(String(255))
-    city: Mapped[str] = mapped_column(String(100), nullable=False)
-    state: Mapped[str] = mapped_column(String(100), nullable=False)
-    postal_code: Mapped[str] = mapped_column(String(20), nullable=False)
-    country_code: Mapped[str] = mapped_column(String(2), nullable=False)
-    delivery_instructions: Mapped[str | None] = mapped_column(String(1000))
-    latitude: Mapped[float | None] = mapped_column(Float)
-    longitude: Mapped[float | None] = mapped_column(Float)
-
-
 class Product(TimestampMixin, Base):
     __tablename__ = "products"
     __table_args__ = (
@@ -152,9 +131,6 @@ class Order(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     status: Mapped[str] = mapped_column(String(10), nullable=False, server_default="CREATED")
-    shipping_address_id: Mapped[int | None] = mapped_column(
-        ForeignKey("shipping_addresses.id", ondelete="RESTRICT"), index=True
-    )
     shipping_address: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
     latitude: Mapped[float | None] = mapped_column(Float)
     longitude: Mapped[float | None] = mapped_column(Float)

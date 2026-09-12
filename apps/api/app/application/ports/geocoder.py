@@ -1,6 +1,6 @@
 from typing import Protocol
 
-from app.domain.shipping_address import AddressDetails, Coordinates
+from app.domain.shipping import AddressDetails, Coordinates
 
 
 class GeocodingUnavailable(Exception):

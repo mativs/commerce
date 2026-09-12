@@ -10,7 +10,7 @@ or geocoded matches. No network request or coordinate generation runs at runtime
 
 from random import choice
 
-from app.domain.shipping_address import Coordinates
+from app.domain.shipping import Coordinates
 
 MAR_DEL_PLATA_LOCATIONS: tuple[tuple[float, float], ...] = (
     (-37.990000, -57.565000),

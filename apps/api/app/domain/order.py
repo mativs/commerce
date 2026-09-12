@@ -3,7 +3,7 @@ from datetime import datetime
 from decimal import Decimal
 from math import asin, cos, radians, sin, sqrt
 
-from app.domain.shipping_address import AddressDetails, Coordinates
+from app.domain.shipping import AddressDetails, Coordinates
 
 
 @dataclass(frozen=True)

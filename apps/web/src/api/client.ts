@@ -78,22 +78,6 @@ export type ShippingAddressInput = {
   country_code: string;
   delivery_instructions: string | null;
 };
-export type ShippingAddress = ShippingAddressInput & {
-  id: number;
-  latitude: number | null;
-  longitude: number | null;
-  created_at: string;
-  updated_at: string;
-  deleted_at: string | null;
-};
-export const shippingAddressApi = {
-  list: (signal: AbortSignal, offset = 0, limit = 20) => request<ShippingAddress[]>(`/shipping-addresses?limit=${limit}&offset=${offset}`, { signal }),
-  get: (id: number, signal?: AbortSignal) => request<ShippingAddress>(`/shipping-addresses/${id}`, { signal }),
-  create: (data: ShippingAddressInput) => request<ShippingAddress>('/shipping-addresses', { method: 'POST', body: JSON.stringify(data) }),
-  update: (id: number, data: ShippingAddressInput) => request<ShippingAddress>(`/shipping-addresses/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  remove: (id: number) => request<void>(`/shipping-addresses/${id}`, { method: 'DELETE' }),
-  logs: (id: number, offset = 0) => request<AuditLog<ShippingAddress>[]>(`/shipping-addresses/${id}/logs?limit=20&offset=${offset}`),
-};
 
 export type ProductInput = {
   name: string;

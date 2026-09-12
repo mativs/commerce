@@ -27,7 +27,7 @@ from app.domain.order import (
     StatusChange,
     WarehouseCandidate,
 )
-from app.domain.shipping_address import Coordinates
+from app.domain.shipping import Coordinates
 
 
 class SqlAlchemyOrderRepository:

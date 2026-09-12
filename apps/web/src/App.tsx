@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { ShippingAddressesPage } from './pages/ShippingAddressesPage';
 import { ProductsPage } from './pages/ProductsPage';
 import { WarehousesPage } from './pages/WarehousesPage';
 import { OrdersPage } from './pages/OrdersPage';
@@ -23,11 +22,9 @@ export default function App() {
       </header>
       {admin && <nav className="admin-tabs" aria-label="Admin sections">
         <a href="#/admin/warehouses" aria-current={route === '#/admin/warehouses' ? 'page' : undefined}>Warehouses</a>
-        <a href="#/admin/shipping-addresses" aria-current={route === '#/admin/shipping-addresses' ? 'page' : undefined}>Shipping addresses</a>
         <a href="#/admin/products" aria-current={route === '#/admin/products' ? 'page' : undefined}>Products</a>
       </nav>}
-      {admin ? (route === '#/admin/products' ? <ProductsPage /> : route === '#/admin/shipping-addresses'
-        ? <ShippingAddressesPage /> : <WarehousesPage />) : <OrdersPage key={route} route={route} />}
+      {admin ? (route === '#/admin/products' ? <ProductsPage /> : <WarehousesPage />) : <OrdersPage key={route} route={route} />}
     </>
   );
 }

@@ -1,6 +1,5 @@
 import asyncio
-from dataclasses import replace
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -10,8 +9,7 @@ from app.adapters.outbound.geocoding.sample_locations import (
     random_mar_del_plata_coordinates,
 )
 from app.application.ports.geocoder import GeocodingUnavailable
-from app.application.services.shipping_addresses import ShippingAddressService
-from app.domain.shipping_address import AddressDetails, Coordinates
+from app.domain.shipping import AddressDetails, Coordinates
 
 DETAILS = AddressDetails(
     recipient_name="Ana",
@@ -36,29 +34,6 @@ def test_mock_pool_and_selection():
         choice.assert_called_with(MAR_DEL_PLATA_LOCATIONS)
     coordinates = asyncio.run(MockGeocoder().geocode(DETAILS))
     assert (coordinates.latitude, coordinates.longitude) in MAR_DEL_PLATA_LOCATIONS
-
-
-@pytest.mark.parametrize(
-    "field",
-    [
-        "address_line1",
-        "address_line2",
-        "city",
-        "state",
-        "postal_code",
-        "country_code",
-    ],
-)
-def test_each_location_field_triggers_geocoding(field):
-    repository = AsyncMock()
-    repository.get.return_value.details = DETAILS
-    geocoder = AsyncMock()
-    geocoder.geocode.return_value = Coordinates(latitude=-38, longitude=-57.57)
-    service = ShippingAddressService(repository, geocoder)
-    changed = replace(DETAILS, **{field: "Changed"})
-    asyncio.run(service.update(1, changed))
-    geocoder.geocode.assert_awaited_once_with(changed)
-    repository.update.assert_awaited_once_with(1, changed, geocoder.geocode.return_value)
 
 
 @pytest.mark.parametrize("latitude,longitude", [(float("nan"), 0), (0, float("inf")), (91, 0)])

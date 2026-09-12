@@ -7,7 +7,6 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Request, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.adapters.inbound.http.dependencies import DatabaseSession, PageLimit, PageOffset
-from app.adapters.inbound.http.shipping_addresses import ShippingAddressInput
 from app.adapters.outbound.persistence.orders import SqlAlchemyOrderRepository
 from app.application.services.orders import OrderService
 from app.domain.order import (
@@ -19,9 +18,33 @@ from app.domain.order import (
     PaymentDetails,
     RequestedItem,
 )
-from app.domain.shipping_address import AddressDetails
+from app.domain.shipping import AddressDetails
 
 router = APIRouter(prefix="/orders", tags=["orders"])
+
+
+class ShippingAddressInput(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True, extra="forbid")
+
+    recipient_name: str = Field(min_length=1, max_length=255)
+    phone: str | None = Field(default=None, max_length=50)
+    address_line1: str = Field(min_length=1, max_length=255)
+    address_line2: str | None = Field(default=None, max_length=255)
+    city: str = Field(min_length=1, max_length=100)
+    state: str = Field(min_length=1, max_length=100)
+    postal_code: str = Field(min_length=1, max_length=20)
+    country_code: str = Field(pattern=r"^[A-Z]{2}$")
+    delivery_instructions: str | None = Field(default=None, max_length=1000)
+
+    @field_validator("country_code", mode="before")
+    @classmethod
+    def normalize_country(cls, value: object) -> object:
+        return value.strip().upper() if isinstance(value, str) else value
+
+    @field_validator("phone", "address_line2", "delivery_instructions")
+    @classmethod
+    def blank_to_none(cls, value: str | None) -> str | None:
+        return value or None
 
 
 class ItemInput(BaseModel):

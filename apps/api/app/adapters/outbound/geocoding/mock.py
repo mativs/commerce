@@ -2,7 +2,7 @@ from secrets import randbelow
 
 from app.adapters.outbound.geocoding.sample_locations import random_mar_del_plata_coordinates
 from app.application.ports.geocoder import GeocodingUnavailable
-from app.domain.shipping_address import AddressDetails, Coordinates
+from app.domain.shipping import AddressDetails, Coordinates
 
 
 class MockGeocoder:
