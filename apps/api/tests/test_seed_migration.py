@@ -53,13 +53,8 @@ def test_seed_data_and_audit(database_client):
         assert product["ean"] == row["ean"]
         assert product["is_active"] is True
     assert len({product["ean"] for product in products}) == 100
-    for path, records in [
-        ("warehouses", warehouses),
-    ]:
-        for record in records:
-            assert record["created_at"] and record["updated_at"] and record["deleted_at"] is None
-            logs = client.get(f"/{path}/{record['id']}/logs").json()
-            assert len(logs) == 1 and logs[0]["action"] == "create"
+    for record in warehouses:
+        assert record["created_at"] and record["updated_at"] and record["deleted_at"] is None
 
 
 def test_seed_conflict_is_atomic(database_client):

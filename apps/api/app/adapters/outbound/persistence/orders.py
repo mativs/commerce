@@ -189,7 +189,7 @@ class SqlAlchemyOrderRepository:
                 return False
             items = await self._items(order_id)
             quantities = {i.product_id: i.quantity for i in items}
-            # Shared locks permit parallel reservations while excluding admin deletion/edits.
+            # Shared locks permit parallel reservations while keeping the selected warehouse stable.
             warehouse = await self.session.scalar(
                 select(Warehouse)
                 .where(Warehouse.id == warehouse_id, Warehouse.deleted_at.is_(None))

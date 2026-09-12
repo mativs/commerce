@@ -1,6 +1,6 @@
 # Backend Assessment
 
-FastAPI + PostgreSQL API with a React order workspace and admin screens.
+FastAPI + PostgreSQL API with a React order workspace.
 
 ## Setup
 
@@ -17,10 +17,10 @@ The migrations also add 5 warehouses and 100 products priced in USD, with varied
 ## Usage
 
 - Open the [web app](http://localhost:5173) to create orders, edit items before checkout, enter shipping details, and view order results.
-- Use the Admin tab to manage warehouses.
+- Warehouses are maintained as internal fulfillment data and are read-only through the API.
 - Use the [API docs](http://localhost:8000/docs) to explore and try the endpoints.
 
-Warehouse coordinates use mock locations in Mar del Plata. Order checkout geocodes its own address snapshot. Deleted admin records retain their audit history.
+Warehouse coordinates use mock locations in Mar del Plata. Order checkout geocodes its own address snapshot.
 
 Use `POST /orders` in the API docs to place an order. See [order checkout](docs/orders.md) for the request, demo stock setup, and retry behavior.
 
@@ -36,4 +36,4 @@ Use `POST /orders` in the API docs to place an order. See [order checkout](docs/
 
 Web changes reload automatically. After API edits, run `docker compose restart api`. After dependency changes, run `make up` to rebuild.
 
-All list endpoints, including admin audit logs, accept `limit` (default 50, maximum 100) and `offset` (default 0). Responses remain arrays. Admin lists show 20 records per page; the order catalog supports paginated name/SKU search.
+All list endpoints accept `limit` (default 50, maximum 100) and `offset` (default 0). Responses remain arrays. The order catalog supports paginated name/SKU search.

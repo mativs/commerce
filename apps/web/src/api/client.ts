@@ -24,9 +24,7 @@ export async function getHealth(signal: AbortSignal): Promise<void> {
   }
 }
 
-export type WarehouseInput = { name: string };
-export type Warehouse = WarehouseInput & { latitude: number; longitude: number; id: number; created_at: string; updated_at: string; deleted_at: string | null };
-export type AuditLog<T = Warehouse> = { id: number; action: string; created_at: string; old_values: T | null; new_values: T | null };
+export type Warehouse = { name: string; latitude: number; longitude: number; id: number; created_at: string; updated_at: string; deleted_at: string | null };
 
 export class ApiError extends Error {
   constructor(message: string, public status: number) { super(message); }
@@ -59,12 +57,7 @@ async function request<T>(path: string, options: RequestInit = {}, timeout = 100
 }
 
 export const warehouseApi = {
-  logs: (id: number, offset = 0) => request<AuditLog[]>(`/warehouses/${id}/logs?limit=20&offset=${offset}`),
-  list: (signal: AbortSignal, offset = 0, limit = 20) => request<Warehouse[]>(`/warehouses?limit=${limit}&offset=${offset}`, { signal }),
   get: (id: number, signal?: AbortSignal) => request<Warehouse>(`/warehouses/${id}`, { signal }),
-  create: (data: WarehouseInput) => request<Warehouse>('/warehouses', { method: 'POST', body: JSON.stringify(data) }),
-  update: (id: number, data: WarehouseInput) => request<Warehouse>(`/warehouses/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  remove: (id: number) => request<void>(`/warehouses/${id}`, { method: 'DELETE' }),
 };
 
 export type ShippingAddressInput = {

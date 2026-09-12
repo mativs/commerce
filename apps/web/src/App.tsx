@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { WarehousesPage } from './pages/WarehousesPage';
 import { OrdersPage } from './pages/OrdersPage';
 
 export default function App() {
@@ -9,20 +8,15 @@ export default function App() {
     window.addEventListener('hashchange', onNavigate);
     return () => window.removeEventListener('hashchange', onNavigate);
   }, []);
-  const admin = route.startsWith('#/admin');
   return (
     <>
       <header className="commerce-header">
         <a className="brand" href="#/orders">Canals<span className="brand-divider">/</span>Commerce</a>
         <nav aria-label="Main navigation">
-          <a href="#/orders" aria-current={!admin ? 'page' : undefined}>Orders</a>
-          <a href="#/admin/warehouses" aria-current={admin ? 'page' : undefined}>Admin</a>
+          <a href="#/orders" aria-current="page">Orders</a>
         </nav>
       </header>
-      {admin && <nav className="admin-tabs" aria-label="Admin sections">
-        <a href="#/admin/warehouses" aria-current={route === '#/admin/warehouses' ? 'page' : undefined}>Warehouses</a>
-      </nav>}
-      {admin ? <WarehousesPage /> : <OrdersPage key={route} route={route} />}
+      <OrdersPage key={route} route={route} />
     </>
   );
 }

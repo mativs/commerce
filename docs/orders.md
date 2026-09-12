@@ -52,7 +52,7 @@ it and records cancellation in one transaction. Status history is written by the
 existing database trigger, with a reason for cancellation.
 
 Shipping details belong to the order snapshot; there is no separate saved-address model or CRUD.
-Checkout uses a separate mock instance so its simulated failures do not affect admin CRUD.
+Checkout uses a separate mock instance so its simulated failures do not affect other API operations.
 
 Both external services use async ports and mock outbound adapters. Checkout geocoding fails
 with probability 1/5. Payment waits two seconds and uses a stable pseudo-random

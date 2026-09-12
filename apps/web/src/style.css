@@ -30,38 +30,26 @@ small { color: #52616b; font-weight: 400; }
 .primary { background: #187047; color: white; }
 .primary:hover { background: #115536; }
 .danger { color: #ae3434; }
-.warehouse-list { list-style: none; padding: 0; margin: 0; }
-.warehouse-list li { display: flex; justify-content: space-between; gap: 20px; align-items: center; padding: 20px 0; border-top: 1px solid #dce3df; }
-.warehouse-list strong { overflow-wrap: anywhere; }
-.warehouse-list .detail { margin: 8px 0 0; }
 @media (max-width: 560px) {
   section { padding: 20px; }
   .coordinates { grid-template-columns: 1fr; gap: 0; }
-  .warehouse-list li { align-items: flex-start; flex-direction: column; }
 }
-.admin-header { background: #fff; border-bottom: 1px solid #dce3df; padding: 20px max(24px, calc((100vw - 852px) / 2)); }
 .brand { color: #172b36; font-weight: 750; text-decoration: none; }
 .brand span { color: #52616b; font-weight: 400; margin-left: 8px; }
-.admin-header nav { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 20px; }
-.admin-header nav a { color: #52616b; padding: 10px 14px; border-radius: 7px; text-decoration: none; }
-.admin-header nav a[aria-current="page"] { background: #eaf1ec; color: #115536; font-weight: 650; }
 a:focus-visible { outline: 3px solid #187047; outline-offset: 3px; }
 textarea { width: 100%; resize: vertical; padding: 12px; border: 1px solid #bccbc3; border-radius: 7px; font: inherit; }
 textarea:focus-visible { outline: 3px solid #187047; outline-offset: 2px; }
 .actions { flex-wrap: wrap; }
-.warehouse-list li > div:first-child { min-width: 0; overflow-wrap: anywhere; }
-.warehouse-list li > .actions { flex-shrink: 0; }
 h3 { font-size: 0.95rem; }
 
 
-/* Orders are the primary workspace; admin keeps its compact maintenance screens. */
+/* Orders are the primary workspace. */
 .commerce-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; background: #fff; border-bottom: 1px solid #dce3df; padding: 22px max(24px, calc((100vw - 1152px) / 2)); }
 .commerce-header .brand { font-size: 1.15rem; letter-spacing: -.04em; }
 .commerce-header .brand-divider { color: #187047; margin: 0 9px; }
-.commerce-header nav, .admin-tabs { display: flex; gap: 8px; }
-.commerce-header nav a, .admin-tabs a { text-decoration: none; color: #52616b; padding: 9px 16px; border-radius: 7px; }
-.commerce-header nav a[aria-current="page"], .admin-tabs a[aria-current="page"] { color: #115536; background: #eaf1ec; font-weight: 650; }
-.admin-tabs { flex-wrap: wrap; max-width: 900px; margin: 24px auto 0; padding: 0 24px; }
+.commerce-header nav { display: flex; gap: 8px; }
+.commerce-header nav a { text-decoration: none; color: #52616b; padding: 9px 16px; border-radius: 7px; }
+.commerce-header nav a[aria-current="page"] { color: #115536; background: #eaf1ec; font-weight: 650; }
 .orders-main { max-width: 1200px; margin: 40px auto 80px; }
 .page-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 30px; }
 .page-heading h1 { margin: 8px 0; }

@@ -1,12 +1,11 @@
-from datetime import UTC, datetime
+from datetime import datetime
 
-from fastapi import APIRouter, HTTPException, Response, status
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select
 
 from app.adapters.inbound.http.dependencies import DatabaseSession, PageLimit, PageOffset
-from app.adapters.outbound.geocoding.warehouse_locations import random_warehouse_coordinates
-from app.adapters.outbound.persistence.models import AuditLog, Warehouse
+from app.adapters.outbound.persistence.models import Warehouse
 
 router = APIRouter(prefix="/warehouses", tags=["warehouses"])
 
@@ -47,65 +46,6 @@ async def list_warehouses(session: DatabaseSession, limit: PageLimit = 50, offse
     ).all()
 
 
-@router.post("", response_model=WarehouseOutput, status_code=status.HTTP_201_CREATED)
-async def create_warehouse(data: WarehouseInput, session: DatabaseSession, response: Response):
-    latitude, longitude = random_warehouse_coordinates()
-    async with session.begin():
-        warehouse = Warehouse(name=data.name, latitude=latitude, longitude=longitude)
-        session.add(warehouse)
-        await session.flush()
-    response.headers["Location"] = f"/warehouses/{warehouse.id}"
-    return warehouse
-
-
 @router.get("/{warehouse_id}", response_model=WarehouseOutput)
 async def get_warehouse(warehouse_id: int, session: DatabaseSession):
     return await find_warehouse(session, warehouse_id)
-
-
-@router.put("/{warehouse_id}", response_model=WarehouseOutput)
-async def update_warehouse(warehouse_id: int, data: WarehouseInput, session: DatabaseSession):
-    async with session.begin():
-        warehouse = await find_warehouse(session, warehouse_id)
-        for field, value in data.model_dump().items():
-            setattr(warehouse, field, value)
-        await session.flush()
-        await session.refresh(warehouse)
-    return warehouse
-
-
-@router.delete("/{warehouse_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_warehouse(warehouse_id: int, session: DatabaseSession):
-    async with session.begin():
-        warehouse = await find_warehouse(session, warehouse_id)
-        warehouse.deleted_at = datetime.now(UTC)
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
-
-
-class AuditLogOutput(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
-    id: int
-    record_id: int
-    action: str
-    old_values: dict | None
-    new_values: dict | None
-    created_at: datetime
-
-
-@router.get("/{warehouse_id}/logs", response_model=list[AuditLogOutput])
-async def warehouse_logs(
-    warehouse_id: int, session: DatabaseSession, limit: PageLimit = 50, offset: PageOffset = 0
-):
-    # History remains available after soft deletion.
-    if await session.get(Warehouse, warehouse_id) is None:
-        raise HTTPException(status_code=404, detail="Warehouse not found.")
-    return (
-        await session.scalars(
-            select(AuditLog)
-            .where(AuditLog.table_name == "warehouses", AuditLog.record_id == warehouse_id)
-            .order_by(AuditLog.id)
-            .limit(limit)
-            .offset(offset)
-        )
-    ).all()

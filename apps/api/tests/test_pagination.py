@@ -1,38 +1,6 @@
 import asyncio
 
-import pytest
 from sqlalchemy import text
-
-
-@pytest.mark.parametrize(
-    "path,payload",
-    [
-        ("warehouses", {"name": "Pagination warehouse"}),
-    ],
-)
-def test_pages_and_logs(database_client, path, payload):
-    client, _ = database_client
-    ids = []
-    for i in range(4):
-        data = payload
-        response = client.post(f"/{path}", json=data)
-        assert response.status_code == 201
-        ids.append(response.json()["id"])
-    assert client.delete(f"/{path}/{ids[1]}").status_code == 204
-    first = client.get(f"/{path}?limit=2&offset=0").json()
-    second = client.get(f"/{path}?limit=2&offset=2").json()
-    assert [r["id"] for r in first] == [ids[0], ids[2]]
-    assert [r["id"] for r in second] == [ids[3]]
-    assert client.get(f"/{path}?limit=2&offset=20").json() == []
-    logs = client.get(f"/{path}/{ids[1]}/logs?limit=1").json()
-    assert [r["action"] for r in logs] == ["create"]
-    assert [r["action"] for r in client.get(f"/{path}/{ids[1]}/logs?limit=1&offset=1").json()] == [
-        "delete"
-    ]
-    assert client.get(f"/{path}/{ids[1]}/logs?offset=2").json() == []
-    for query in ["limit=0", "limit=101", "offset=-1", "limit=1.5", "offset=x"]:
-        assert client.get(f"/{path}?{query}").status_code == 422
-        assert client.get(f"/{path}/{ids[0]}/logs?{query}").status_code == 422
 
 
 def test_default_limit_and_product_search(database_client):

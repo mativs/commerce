@@ -9,13 +9,12 @@ from alembic.operations import Operations
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 
-from app.adapters.outbound.persistence.models import Product, Stock
+from app.adapters.outbound.persistence.models import Product, Stock, Warehouse
 
 
 @pytest.fixture
 def stock_data(database_client):
     client, sessions = database_client
-    warehouse = client.post("/warehouses", json={"name": "Stock test"}).json()
 
     def migrate(connection):
         connection.execute(
@@ -32,13 +31,14 @@ def stock_data(database_client):
     async def setup():
         async with sessions() as session, session.begin():
             await (await session.connection()).run_sync(migrate)
+            warehouse = Warehouse(name="Stock test", latitude=-38, longitude=-57)
             product = Product(name="Stock test", sku="STOCK-TEST", price=Decimal("1.00"))
-            session.add(product)
+            session.add_all([warehouse, product])
             await session.flush()
-            return product.id
+            return warehouse.id, product.id
 
-    product_id = asyncio.run(setup())
-    return sessions, {"warehouse_id": warehouse["id"], "product_id": product_id}
+    warehouse_id, product_id = asyncio.run(setup())
+    return sessions, {"warehouse_id": warehouse_id, "product_id": product_id}
 
 
 def test_stock_defaults_update_and_audit(stock_data):
