@@ -1,0 +1,12 @@
+{
+  "include": ["apps/api"],
+  "exclude": ["**/__pycache__"],
+  "venvPath": "apps/api",
+  "venv": ".venv",
+  "executionEnvironments": [
+    {
+      "root": "apps/api",
+      "extraPaths": ["apps/api"]
+    }
+  ]
+}
