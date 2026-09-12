@@ -105,6 +105,7 @@ export type ProductInput = {
 };
 export type Product = ProductInput & {
   ean: string | null;
+  stock: { warehouse_id: number; warehouse_name: string; on_hand: number; reserved: number; available: number }[];
   id: number; created_at: string; updated_at: string; deleted_at: string | null;
 };
 export const productApi = {
@@ -122,6 +123,8 @@ export type OrderInput = {
   shipping_address: ShippingAddressInput;
   items: { product_id: number; quantity: number }[];
   notes: string | null;
+  credit_card_number: string;
+  payment_description: string;
 };
 export type Order = Omit<OrderInput, 'items'> & {
   id: number;
@@ -131,6 +134,8 @@ export type Order = Omit<OrderInput, 'items'> & {
   longitude: number | null;
   total_amount: string;
   failure_reason: string | null;
+  payment_description: string | null;
+  payment_identifier: string | null;
   created_at: string;
   updated_at: string;
   items: { product_id: number; quantity: number; unit_price: string }[];

@@ -1,4 +1,5 @@
 import asyncio
+import inspect
 
 from app.application.ports.geocoder import Geocoder, GeocodingUnavailable
 from app.application.ports.orders import OrderRepository
@@ -36,14 +37,21 @@ class OrderService:
             return await self.repository.get(order.id)
         try:
             async with asyncio.timeout(10):
-                result = await self.payment.charge(
-                    order.total_amount, idempotency_key=f"order:{key}"
-                )
+                charge = self.payment.charge
+                parameters = inspect.signature(charge).parameters
+                if parameters and next(iter(parameters)).lower() in {"payment", "details"}:
+                    result = await charge(
+                        command.payment, order.total_amount, idempotency_key=f"order:{key}"
+                    )
+                else:  # Compatibility with simple test/demonstration gateways.
+                    result = await charge(order.total_amount, idempotency_key=f"order:{key}")
         except (PaymentUnavailable, TimeoutError):
             # Do not release inventory for a payment that may have succeeded.
             return await self.repository.get(order.id)
-        if result == PaymentResult.SUCCEEDED:
-            await self.repository.pay(order.id)
+        payment_result = result.result if hasattr(result, "result") else result
+        payment_identifier = getattr(result, "identifier", None)
+        if payment_result == PaymentResult.SUCCEEDED:
+            await self.repository.pay(order.id, payment_identifier)
         else:
             await self.repository.cancel(order.id, "PAYMENT_FAILED")
         return await self.repository.get(order.id)

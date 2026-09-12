@@ -19,7 +19,7 @@ def test_mock_payment_delay_idempotency_and_outcomes():
                 assert result == await MockPaymentGateway().charge(
                     Decimal("12.34"), idempotency_key=key
                 )
-                outcomes.append(result)
+                outcomes.append(result.result)
             assert set(outcomes) == {PaymentResult.SUCCEEDED, PaymentResult.DECLINED}
             assert sleep.await_count == 40
             sleep.assert_awaited_with(2)

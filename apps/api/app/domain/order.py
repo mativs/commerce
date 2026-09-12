@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from decimal import Decimal
 from math import asin, cos, radians, sin, sqrt
@@ -13,10 +13,19 @@ class RequestedItem:
 
 
 @dataclass(frozen=True)
+class PaymentDetails:
+    credit_card_number: str
+    description: str
+
+
+@dataclass(frozen=True)
 class CreateOrder:
     shipping_address: AddressDetails
     items: tuple[RequestedItem, ...]
     notes: str | None = None
+    payment: PaymentDetails = field(
+        default_factory=lambda: PaymentDetails(credit_card_number="", description="")
+    )
 
 
 @dataclass(frozen=True)
@@ -50,6 +59,8 @@ class OrderView:
     total_amount: Decimal
     notes: str | None
     failure_reason: str | None
+    payment_description: str | None
+    payment_identifier: str | None
     created_at: datetime
     updated_at: datetime
     items: list[OrderItemView]

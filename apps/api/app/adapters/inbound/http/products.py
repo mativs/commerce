@@ -4,13 +4,13 @@ from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query, Response, status
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import or_, select
+from sqlalchemy import or_, select, text
 from sqlalchemy.exc import IntegrityError
 
 from app.adapters.inbound.http.dependencies import DatabaseSession, PageLimit, PageOffset
 from app.adapters.inbound.http.warehouses import AuditLogOutput
 from app.adapters.outbound.identifiers.ean import random_ean
-from app.adapters.outbound.persistence.models import AuditLog, Product
+from app.adapters.outbound.persistence.models import AuditLog, Product, Stock, Warehouse
 from app.domain.product import validate_ean
 
 router = APIRouter(prefix="/products", tags=["products"])
@@ -51,6 +51,46 @@ class ProductOutput(ProductInput):
     created_at: datetime
     updated_at: datetime
     deleted_at: datetime | None
+    stock: list["StockOutput"] = Field(default_factory=list)
+
+
+class StockOutput(BaseModel):
+    warehouse_id: int
+    warehouse_name: str
+    on_hand: int
+    reserved: int
+    available: int
+
+
+async def product_output(session: DatabaseSession, product: Product) -> ProductOutput:
+    stock_exists = await session.scalar(text("SELECT to_regclass(current_schema() || '.stock')"))
+    if stock_exists is None:
+        rows = []
+    else:
+        rows = (
+            await session.execute(
+                select(Stock, Warehouse.name)
+                .join(Warehouse, Warehouse.id == Stock.warehouse_id)
+                .where(
+                    Stock.product_id == product.id,
+                    Stock.deleted_at.is_(None),
+                    Warehouse.deleted_at.is_(None),
+                )
+                .order_by(Warehouse.id)
+            )
+        ).all()
+    output = ProductOutput.model_validate(product)
+    output.stock = [
+        StockOutput(
+            warehouse_id=stock.warehouse_id,
+            warehouse_name=warehouse_name,
+            on_hand=stock.on_hand,
+            reserved=stock.reserved,
+            available=stock.on_hand - stock.reserved,
+        )
+        for stock, warehouse_name in rows
+    ]
+    return output
 
 
 async def find_product(session: DatabaseSession, product_id: int) -> Product:
@@ -94,7 +134,8 @@ async def list_products(
         query = query.where(Product.is_active == is_active)
     if currency is not None:
         query = query.where(Product.currency == currency)
-    return (await session.scalars(query.order_by(Product.id).limit(limit).offset(offset))).all()
+    products = (await session.scalars(query.order_by(Product.id).limit(limit).offset(offset))).all()
+    return [await product_output(session, product) for product in products]
 
 
 @router.post("", response_model=ProductOutput, status_code=status.HTTP_201_CREATED)
@@ -112,7 +153,7 @@ async def create_product(data: ProductInput, session: DatabaseSession, response:
                 continue
             raise_identifier_conflict(error)
         response.headers["Location"] = f"/products/{product.id}"
-        return product
+        return await product_output(session, product)
     raise HTTPException(
         status_code=503, detail="Could not generate a unique EAN. Please try again."
     )
@@ -120,7 +161,7 @@ async def create_product(data: ProductInput, session: DatabaseSession, response:
 
 @router.get("/{product_id}", response_model=ProductOutput)
 async def get_product(product_id: int, session: DatabaseSession):
-    return await find_product(session, product_id)
+    return await product_output(session, await find_product(session, product_id))
 
 
 @router.put("/{product_id}", response_model=ProductOutput)
@@ -134,7 +175,7 @@ async def update_product(product_id: int, data: ProductInput, session: DatabaseS
             await session.refresh(product)
     except IntegrityError as error:
         raise_identifier_conflict(error)
-    return product
+    return await product_output(session, product)
 
 
 @router.delete("/{product_id}", status_code=status.HTTP_204_NO_CONTENT)

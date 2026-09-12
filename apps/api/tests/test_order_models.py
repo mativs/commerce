@@ -42,6 +42,8 @@ def order_models(database_client):
             "0007_order_models.py",
             "0008_order_items.py",
             "0009_order_checkout.py",
+            "0010_seed_stock.py",
+            "0011_order_payment.py",
         ):
             path = Path(__file__).parents[1] / "migrations/versions" / filename
             spec = importlib.util.spec_from_file_location("migration", path)

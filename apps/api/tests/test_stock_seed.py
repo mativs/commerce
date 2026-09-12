@@ -18,7 +18,7 @@ def run_migration(connection, filename):
 
 
 def test_stock_seed_distribution_audit_and_existing_balances(database_client):
-    _, sessions = database_client
+    client, sessions = database_client
 
     async def check():
         await apply_seed(sessions)

@@ -17,7 +17,9 @@ are not accepted as input.
     "country_code": "AR"
   },
   "items": [{"product_id": 1, "quantity": 2}],
-  "notes": "Ring the bell"
+  "notes": "Ring the bell",
+  "credit_card_number": "4242424242424242",
+  "payment_description": "Demo checkout"
 }
 ```
 
@@ -30,7 +32,8 @@ are not accepted as input.
 - `422`: invalid input or an unavailable/non-USD product; no order is created.
 
 `Location` identifies `GET /orders/{id}`, which includes items and chronological
-status history. `GET /orders?limit=50&offset=0` lists newest orders first. Editing,
+status history and, after payment, the provider's payment reference. The card number
+is never returned. `GET /orders?limit=50&offset=0` lists newest orders first. Editing,
 manual status changes, and deletion endpoints are not part of this operation.
 
 Order creation, captured item prices, and the total commit together. Geocoding runs

@@ -18,7 +18,7 @@ const labels: Record<string, string> = { CREATED: 'Created', BOOKED: 'Awaiting p
 const storageKey = 'canals-checkout-attempt';
 type Attempt = { key: string; payload: OrderInput };
 function savedAttempt(): Attempt | null {
-  try { const value = JSON.parse(sessionStorage.getItem(storageKey) || 'null'); return value?.key && value?.payload?.items && value?.payload?.shipping_address ? value : null; }
+  try { const value = JSON.parse(sessionStorage.getItem(storageKey) || 'null'); return value?.key && value?.payload?.items && value?.payload?.shipping_address && value?.payload?.credit_card_number && value?.payload?.payment_description ? value : null; }
   catch { return null; }
 }
 function Badge({ status }: { status: string }) { return <span className={`order-badge badge-${status.toLowerCase()}`}>{labels[status] || status}</span>; }
@@ -79,6 +79,8 @@ function OrderForm() {
   const [items, setItems] = useState<{ product_id: number; quantity: string }[]>(() => (attempt?.payload.items || []).map((i) => ({ ...i, quantity: String(i.quantity) })));
   const [address, setAddress] = useState<ShippingAddressInput>(attempt?.payload.shipping_address || blankAddress);
   const [notes, setNotes] = useState(attempt?.payload.notes || '');
+  const [cardNumber, setCardNumber] = useState(attempt?.payload.credit_card_number || '');
+  const [paymentDescription, setPaymentDescription] = useState(attempt?.payload.payment_description || '');
   const [search, setSearch] = useState('');
   const [searchOffset, setSearchOffset] = useState(0);
   const [results, setResults] = useState<Product[]>([]);
@@ -121,7 +123,11 @@ function OrderForm() {
     if (!attempt && !validItems) { setError('Add at least one product with a valid whole-number quantity.'); return; }
     submitting.current = true; setBusy(true); setError('');
     try {
-      const next = attempt || { key: crypto.randomUUID(), payload: { shipping_address: address, notes: notes.trim() || null, items: items.map((i) => ({ product_id: i.product_id, quantity: Number(i.quantity) })) } };
+      if (!attempt && (!/^\d{13,19}$/.test(cardNumber) || !paymentDescription.trim())) {
+        setError('Enter a valid 13–19 digit card number and payment description.');
+        setBusy(false); submitting.current = false; return;
+      }
+      const next = attempt || { key: crypto.randomUUID(), payload: { shipping_address: address, notes: notes.trim() || null, credit_card_number: cardNumber, payment_description: paymentDescription.trim(), items: items.map((i) => ({ product_id: i.product_id, quantity: Number(i.quantity) })) } };
       // Persist before sending: even a refresh after an uncertain response must reuse the key.
       sessionStorage.setItem(storageKey, JSON.stringify(next)); setAttempt(next);
       const order = await orderApi.create(next.payload, next.key);
@@ -141,17 +147,21 @@ function OrderForm() {
           {catalogError && <p role="alert" className="error">{catalogError} <button type="button" onClick={() => setReload(reload + 1)}>Reload products</button></p>}
           <fieldset disabled={locked || loading}>
             <label>Find a product<input type="search" placeholder="Search by product name or SKU…" value={search} onChange={(e) => { setSearch(e.target.value); setSearchOffset(0); }} /></label>
-            {loading ? <p role="status">Loading products…</p> : <div className="product-picker">{results.map((p) => <div className="picker-row" key={p.id}><div><strong>{p.name}</strong><small className="block">{p.sku} · {money(p.price)}</small></div><button type="button" aria-label={`Add ${p.name}`} disabled={items.some((i) => i.product_id === p.id)} onClick={() => setItems([...items, { product_id: p.id, quantity: '1' }])}>{items.some((i) => i.product_id === p.id) ? 'Added' : '+ Add'}</button></div>)}{!results.length && <p className="detail">{search ? 'No matches. Try a different name or SKU.' : 'No products on this page.'}</p>}</div>}
+            {loading ? <p role="status">Loading products…</p> : <div className="product-picker">{results.map((p) => <div className="picker-row" key={p.id}><div><strong>{p.name}</strong><small className="block">{p.sku} · {money(p.price)}</small><StockList product={p} /></div><button type="button" aria-label={`Add ${p.name}`} disabled={items.some((i) => i.product_id === p.id)} onClick={() => setItems([...items, { product_id: p.id, quantity: '1' }])}>{items.some((i) => i.product_id === p.id) ? 'Added' : '+ Add'}</button></div>)}{!results.length && <p className="detail">{search ? 'No matches. Try a different name or SKU.' : 'No products on this page.'}</p>}</div>}
             <Pagination offset={searchOffset} count={results.length} size={8} busy={locked || loading || !!catalogError} onChange={setSearchOffset} />
             <div className="selected-heading"><h3>Order items <span className="count">{items.length}</span></h3></div>
             {!items.length && <p className="detail">Add products above to start your order.</p>}
-            {items.map((item) => <div className="cart-row" key={item.product_id}><div><strong>{byId.get(item.product_id)?.name || `Product #${item.product_id}`}</strong><small className="block">{byId.has(item.product_id) ? `${money(byId.get(item.product_id)!.price)} each` : 'Product currently unavailable'}</small></div><label className="quantity-label">Quantity<input aria-label={`Quantity for ${byId.get(item.product_id)?.name || item.product_id}`} type="number" required min={1} max={2147483647} step={1} value={item.quantity} onChange={(e) => setItems(items.map((i) => i.product_id === item.product_id ? { ...i, quantity: e.target.value } : i))} /></label><button type="button" className="text-button danger" aria-label={`Remove ${byId.get(item.product_id)?.name || item.product_id}`} onClick={() => setItems(items.filter((i) => i.product_id !== item.product_id))}>Remove</button></div>)}
+            {items.map((item) => <div className="cart-row" key={item.product_id}><div><strong>{byId.get(item.product_id)?.name || `Product #${item.product_id}`}</strong><small className="block">{byId.has(item.product_id) ? `${money(byId.get(item.product_id)!.price)} each` : 'Product currently unavailable'}</small>{byId.has(item.product_id) && <StockList product={byId.get(item.product_id)!} />}</div><label className="quantity-label">Quantity<input aria-label={`Quantity for ${byId.get(item.product_id)?.name || item.product_id}`} type="number" required min={1} max={2147483647} step={1} value={item.quantity} onChange={(e) => setItems(items.map((i) => i.product_id === item.product_id ? { ...i, quantity: e.target.value } : i))} /></label><button type="button" className="text-button danger" aria-label={`Remove ${byId.get(item.product_id)?.name || item.product_id}`} onClick={() => setItems(items.filter((i) => i.product_id !== item.product_id))}>Remove</button></div>)}
           </fieldset>
         </section>
         <section className="orders-panel"><h2><span className="step-number">2</span> Shipping information</h2><fieldset disabled={locked}>
           <div className="address-grid">{fields.map((f) => <label key={f.name}>{f.label}<input required={f.required} maxLength={f.max} autoComplete={f.auto} type={f.name === 'phone' ? 'tel' : 'text'} pattern={f.name === 'country_code' ? '[A-Za-z]{2}' : f.required ? '.*\\S.*' : undefined} value={address[f.name] || ''} onChange={(e) => setAddress({ ...address, [f.name]: f.name === 'country_code' ? e.target.value.toUpperCase() : e.target.value })} />{f.name === 'country_code' && <small>Two-letter code, e.g. AR or US.</small>}</label>)}</div>
           <label>Delivery instructions (optional)<textarea rows={2} maxLength={1000} value={address.delivery_instructions || ''} placeholder="Gate code, entrance, or delivery preferences" onChange={(e) => setAddress({ ...address, delivery_instructions: e.target.value })} /></label>
           <label>Order notes (optional)<textarea rows={2} maxLength={2000} value={notes} onChange={(e) => setNotes(e.target.value)} /></label>
+        </fieldset></section>
+        <section className="orders-panel"><h2><span className="step-number">3</span> Payment information</h2><fieldset disabled={locked}>
+          <label>Credit card number<input required inputMode="numeric" autoComplete="cc-number" pattern="[0-9]{13,19}" maxLength={19} value={cardNumber} onChange={(e) => setCardNumber(e.target.value.replace(/\D/g, ''))} placeholder="13–19 digits" /><small>Demo payment only. No real charge is made.</small></label>
+          <label>Payment description<input required maxLength={255} value={paymentDescription} onChange={(e) => setPaymentDescription(e.target.value)} placeholder="e.g. Order for electrical supplies" /></label>
         </fieldset></section>
       </div>
       <aside className="checkout-summary"><section className="orders-panel"><p className="eyebrow">READY WHEN YOU ARE</p><h2>Order summary</h2><div className="summary-line"><span>Products</span><strong>{items.length}</strong></div><div className="summary-line summary-total"><span>Estimated total</span><strong>{money(total)}</strong></div><p className="detail">USD · Final prices and availability are confirmed when you place the order.</p>
@@ -162,6 +172,20 @@ function OrderForm() {
       </section></aside>
     </form>
   </main>;
+}
+
+function StockList({ product }: { product: Product }) {
+  return product.stock.length ? (
+    <ul className="stock-list" aria-label={`Stock for ${product.name}`}>
+      {product.stock.map((stock) => (
+        <li key={stock.warehouse_id}>
+          <span>{stock.warehouse_name}</span>
+          <strong>{stock.available} available</strong>
+          <small>({stock.on_hand} on hand · {stock.reserved} reserved)</small>
+        </li>
+      ))}
+    </ul>
+  ) : <small className="stock-line">No stock recorded</small>;
 }
 
 function OrderDetail({ id }: { id: number }) {
@@ -192,7 +216,7 @@ function OrderDetail({ id }: { id: number }) {
     {order && <><div className={`order-outcome outcome-${order.status.toLowerCase()}`} role="status"><Badge status={order.status} /><p>{order.status === 'PAID' ? 'Your order is confirmed and paid. Your items are reserved for delivery.' : order.status === 'CANCELLED' ? reasons[order.failure_reason || ''] || 'This order has been cancelled.' : 'Your order is saved. Payment or processing is not yet confirmed. Refresh to check its status; do not place the same order again.'}</p></div>
       <div className="checkout-layout"><section className="orders-panel"><h2>Items ordered</h2><div className="table-scroll"><table className="orders-table"><thead><tr><th>Product</th><th>Quantity</th><th>Unit price</th><th>Amount</th></tr></thead><tbody>{order.items.map((item) => <tr key={item.product_id}><td>{products.find((p) => p.id === item.product_id)?.name || `Product #${item.product_id}`}<small className="block">{products.find((p) => p.id === item.product_id)?.sku}</small></td><td>{item.quantity}</td><td className="money">{money(item.unit_price)}</td><td className="money">{money(Number(item.unit_price) * item.quantity)}</td></tr>)}</tbody></table></div><div className="summary-line summary-total"><span>Total · USD</span><strong>{money(order.total_amount)}</strong></div>{order.notes && <><h3>Order notes</h3><p className="preserve-lines">{order.notes}</p></>}</section>
       <section className="orders-panel"><h2>Delivery details</h2>{address && <address><strong>{address.recipient_name}</strong><br />{address.address_line1}{address.address_line2 && <><br />{address.address_line2}</>}<br />{address.city}, {address.state} {address.postal_code}<br />{address.country_code}{address.phone && <><br />{address.phone}</>}</address>}{address?.delivery_instructions && <><h3>Delivery instructions</h3><p className="preserve-lines">{address.delivery_instructions}</p></>}<hr /><h3>Assigned warehouse</h3><p>{order.warehouse_id ? warehouses.find((w) => w.id === order.warehouse_id)?.name || `Warehouse #${order.warehouse_id}` : 'Not assigned'}</p>{order.latitude !== null && order.longitude !== null && <small>Delivery coordinates: {order.latitude.toFixed(5)}, {order.longitude.toFixed(5)}</small>}</section></div>
-      <section className="orders-panel"><h2>Order activity</h2><ol className="order-timeline">{order.history.map((event, index) => <li key={index}><div><strong>{labels[event.status] || event.status}</strong><small className="block">{activityDate(event.created_at)}</small>{event.reason && <p>{reasons[event.reason] || event.reason}</p>}</div></li>)}</ol></section>
+      <section className="orders-panel"><h2>Order activity</h2><ol className="order-timeline">{order.history.map((event, index) => <li key={index}><div><strong>{labels[event.status] || event.status}</strong><small className="block">{activityDate(event.created_at)}</small>{event.reason && <p>{reasons[event.reason] || event.reason}</p>}</div></li>)}</ol>{order.payment_identifier && <p className="detail">Payment reference: <strong>{order.payment_identifier}</strong></p>}</section>
     </>}
   </main>;
 }

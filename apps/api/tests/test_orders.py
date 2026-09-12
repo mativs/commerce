@@ -55,6 +55,8 @@ def checkout(order_models, database_client):
     body = {
         "shipping_address": ADDRESS,
         "items": [{"product_id": p, "quantity": 2} for p in products],
+        "credit_card_number": "4242424242424242",
+        "payment_description": "Demo checkout",
     }
     return client, sessions, body, warehouses
 
@@ -77,6 +79,8 @@ def test_checkout_snapshots_duplicates_history_and_replay(checkout):
     assert response.status_code == 201, response.text
     order = response.json()
     assert order["status"] == "PAID" and order["warehouse_id"] == warehouses[0]
+    assert order["payment_description"] == "Demo checkout"
+    assert order["payment_identifier"].startswith("pay_")
     assert order["total_amount"] == "74.04"
     assert [i["quantity"] for i in order["items"]] == [4, 2]
     assert [h["status"] for h in order["history"]] == ["CREATED", "BOOKED", "PAID"]

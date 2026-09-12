@@ -150,6 +150,9 @@ class Order(Base):
     idempotency_key: Mapped[str | None] = mapped_column(String(128), unique=True)
     request_hash: Mapped[str | None] = mapped_column(String(64))
     failure_reason: Mapped[str | None] = mapped_column(String(40))
+    payment_description: Mapped[str | None] = mapped_column(String(255))
+    credit_card_number: Mapped[str | None] = mapped_column(String(19))
+    payment_identifier: Mapped[str | None] = mapped_column(String(128), unique=True)
     warehouse_id: Mapped[int | None] = mapped_column(
         ForeignKey("warehouses.id", ondelete="RESTRICT"), index=True
     )

@@ -69,6 +69,8 @@ class SqlAlchemyOrderRepository:
             total_amount=row.total_amount,
             notes=row.notes,
             failure_reason=row.failure_reason,
+            payment_description=row.payment_description,
+            payment_identifier=row.payment_identifier,
             created_at=row.created_at,
             updated_at=row.updated_at,
             items=[OrderItemView(i.product_id, i.quantity, i.unit_price) for i in items],
@@ -88,6 +90,8 @@ class SqlAlchemyOrderRepository:
                     notes=command.notes,
                     idempotency_key=key,
                     request_hash=fingerprint,
+                    payment_description=command.payment.description,
+                    credit_card_number=command.payment.credit_card_number,
                 )
                 .on_conflict_do_nothing(index_elements=[Order.idempotency_key])
                 .returning(Order.id)
@@ -242,10 +246,11 @@ class SqlAlchemyOrderRepository:
             order.failure_reason = reason
             order.status = "CANCELLED"
 
-    async def pay(self, order_id: int) -> None:
+    async def pay(self, order_id: int, payment_identifier: str | None = None) -> None:
         async with self.session.begin():
             order = await self._order(order_id, lock=True)
             if order.status == "BOOKED":
+                order.payment_identifier = payment_identifier
                 order.status = "PAID"
 
     async def get(self, order_id: int) -> OrderView:

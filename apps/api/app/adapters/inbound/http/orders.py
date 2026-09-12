@@ -15,6 +15,7 @@ from app.domain.order import (
     IdempotencyConflict,
     InvalidOrder,
     OrderNotFound,
+    PaymentDetails,
     RequestedItem,
 )
 from app.domain.shipping_address import AddressDetails
@@ -33,6 +34,8 @@ class OrderInput(BaseModel):
     shipping_address: ShippingAddressInput
     items: list[ItemInput] = Field(min_length=1, max_length=1000)
     notes: str | None = Field(default=None, max_length=2000)
+    credit_card_number: str = Field(pattern=r"^\d{13,19}$")
+    payment_description: str = Field(min_length=1, max_length=255)
 
     @model_validator(mode="after")
     def combine_items(self):
@@ -67,6 +70,8 @@ class OrderOutput(BaseModel):
     total_amount: Decimal
     notes: str | None
     failure_reason: str | None
+    payment_description: str | None
+    payment_identifier: str | None
     created_at: datetime
     updated_at: datetime
     items: list[ItemOutput]
@@ -103,6 +108,10 @@ async def create_order(
         shipping_address=AddressDetails(**data.shipping_address.model_dump()),
         items=tuple(RequestedItem(i.product_id, i.quantity) for i in data.items),
         notes=data.notes,
+        payment=PaymentDetails(
+            credit_card_number=data.credit_card_number,
+            description=data.payment_description,
+        ),
     )
     try:
         order = await service.create(command, idempotency_key)
