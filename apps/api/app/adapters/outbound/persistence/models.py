@@ -5,8 +5,10 @@ from sqlalchemy import (
     Boolean,
     CheckConstraint,
     DateTime,
+    FetchedValue,
     Float,
     ForeignKey,
+    Index,
     MetaData,
     Numeric,
     String,
@@ -77,8 +79,8 @@ class ShippingAddress(TimestampMixin, Base):
     postal_code: Mapped[str] = mapped_column(String(20), nullable=False)
     country_code: Mapped[str] = mapped_column(String(2), nullable=False)
     delivery_instructions: Mapped[str | None] = mapped_column(String(1000))
-    latitude: Mapped[float] = mapped_column(Float, nullable=False)
-    longitude: Mapped[float] = mapped_column(Float, nullable=False)
+    latitude: Mapped[float | None] = mapped_column(Float)
+    longitude: Mapped[float | None] = mapped_column(Float)
 
 
 class Product(TimestampMixin, Base):
@@ -120,3 +122,93 @@ class Stock(TimestampMixin, Base):
     )
     on_hand: Mapped[int] = mapped_column(nullable=False, server_default="0")
     reserved: Mapped[int] = mapped_column(nullable=False, server_default="0")
+
+
+class Order(Base):
+    __tablename__ = "orders"
+    __mapper_args__ = {"eager_defaults": True}
+    __table_args__ = (
+        CheckConstraint("latitude BETWEEN -90 AND 90", name="latitude_range"),
+        CheckConstraint("longitude BETWEEN -180 AND 180", name="longitude_range"),
+        CheckConstraint("(latitude IS NULL) = (longitude IS NULL)", name="coordinates_pair"),
+        CheckConstraint(
+            "status IN ('CREATED', 'BOOKED', 'PAID', 'CANCELLED')", name="status_valid"
+        ),
+        CheckConstraint(
+            "total_amount >= 0 AND total_amount < 'Infinity'::numeric", name="total_valid"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    status: Mapped[str] = mapped_column(String(10), nullable=False, server_default="CREATED")
+    shipping_address_id: Mapped[int | None] = mapped_column(
+        ForeignKey("shipping_addresses.id", ondelete="RESTRICT"), index=True
+    )
+    shipping_address: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
+    latitude: Mapped[float | None] = mapped_column(Float)
+    longitude: Mapped[float | None] = mapped_column(Float)
+    idempotency_key: Mapped[str | None] = mapped_column(String(128), unique=True)
+    request_hash: Mapped[str | None] = mapped_column(String(64))
+    failure_reason: Mapped[str | None] = mapped_column(String(40))
+    warehouse_id: Mapped[int | None] = mapped_column(
+        ForeignKey("warehouses.id", ondelete="RESTRICT"), index=True
+    )
+    total_amount: Mapped[Decimal] = mapped_column(
+        Numeric(22, 2), nullable=False, server_default="0"
+    )
+    notes: Mapped[str | None] = mapped_column(String(2000))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.clock_timestamp()
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=func.clock_timestamp(),
+        server_onupdate=FetchedValue(),
+    )
+
+
+class OrderStatusHistory(Base):
+    """Append-only status changes; use created_at and id for chronological ordering."""
+
+    __tablename__ = "order_status_history"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('CREATED', 'BOOKED', 'PAID', 'CANCELLED')", name="status_valid"
+        ),
+        Index("ix_order_status_history_chronology", "order_id", "created_at", "id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    order_id: Mapped[int] = mapped_column(
+        ForeignKey("orders.id", ondelete="RESTRICT"), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(10), nullable=False)
+    reason: Mapped[str | None] = mapped_column(String(40))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, server_default=func.clock_timestamp()
+    )
+
+
+class OrderItem(Base):
+    """One product per order with a price captured when the item is inserted."""
+
+    __tablename__ = "order_items"
+    __mapper_args__ = {"eager_defaults": True}
+    __table_args__ = (
+        UniqueConstraint("order_id", "product_id", name="uq_order_items_order_product"),
+        CheckConstraint("quantity > 0", name="quantity_positive"),
+        CheckConstraint("unit_price >= 0 AND unit_price < 'Infinity'::numeric", name="price_valid"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    order_id: Mapped[int] = mapped_column(
+        ForeignKey("orders.id", ondelete="RESTRICT"), nullable=False
+    )
+    product_id: Mapped[int] = mapped_column(
+        ForeignKey("products.id", ondelete="RESTRICT"), nullable=False, index=True
+    )
+    quantity: Mapped[int] = mapped_column(nullable=False)
+    unit_price: Mapped[Decimal] = mapped_column(
+        Numeric(12, 2), nullable=False, server_default=FetchedValue()
+    )

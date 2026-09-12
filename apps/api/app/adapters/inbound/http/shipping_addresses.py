@@ -50,8 +50,8 @@ class ShippingAddressInput(BaseModel):
 
 class ShippingAddressOutput(ShippingAddressInput):
     id: int
-    latitude: float
-    longitude: float
+    latitude: float | None
+    longitude: float | None
     created_at: datetime
     updated_at: datetime
     deleted_at: datetime | None
@@ -60,7 +60,11 @@ class ShippingAddressOutput(ShippingAddressInput):
     def from_domain(cls, address: ShippingAddress) -> "ShippingAddressOutput":
         return cls(
             **asdict(address.details),
-            **asdict(address.coordinates),
+            **(
+                asdict(address.coordinates)
+                if address.coordinates
+                else {"latitude": None, "longitude": None}
+            ),
             id=address.id,
             created_at=address.created_at,
             updated_at=address.updated_at,

@@ -40,7 +40,7 @@ class AddressDetails:
 class ShippingAddress:
     id: int
     details: AddressDetails
-    coordinates: Coordinates
+    coordinates: Coordinates | None
     created_at: datetime
     updated_at: datetime
     deleted_at: datetime | None

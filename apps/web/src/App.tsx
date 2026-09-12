@@ -2,31 +2,32 @@ import { useEffect, useState } from 'react';
 import { ShippingAddressesPage } from './pages/ShippingAddressesPage';
 import { ProductsPage } from './pages/ProductsPage';
 import { WarehousesPage } from './pages/WarehousesPage';
-
-function currentSection() {
-  if (window.location.hash === '#/admin/products') return 'products';
-  return window.location.hash === '#/admin/shipping-addresses' ? 'shipping-addresses' : 'warehouses';
-}
+import { OrdersPage } from './pages/OrdersPage';
 
 export default function App() {
-  const [section, setSection] = useState(currentSection);
+  const [route, setRoute] = useState(window.location.hash);
   useEffect(() => {
-    const onNavigate = () => setSection(currentSection());
+    const onNavigate = () => { setRoute(window.location.hash); window.scrollTo(0, 0); };
     window.addEventListener('hashchange', onNavigate);
     return () => window.removeEventListener('hashchange', onNavigate);
   }, []);
-
+  const admin = route.startsWith('#/admin');
   return (
     <>
-      <header className="admin-header">
-        <a className="brand" href="#/admin/warehouses">Canals Commerce <span>Admin</span></a>
-        <nav aria-label="Admin sections">
-          <a href="#/admin/warehouses" aria-current={section === 'warehouses' ? 'page' : undefined}>Warehouses</a>
-          <a href="#/admin/shipping-addresses" aria-current={section === 'shipping-addresses' ? 'page' : undefined}>Shipping addresses</a>
-          <a href="#/admin/products" aria-current={section === 'products' ? 'page' : undefined}>Products</a>
+      <header className="commerce-header">
+        <a className="brand" href="#/orders">Canals<span className="brand-divider">/</span>Commerce</a>
+        <nav aria-label="Main navigation">
+          <a href="#/orders" aria-current={!admin ? 'page' : undefined}>Orders</a>
+          <a href="#/admin/warehouses" aria-current={admin ? 'page' : undefined}>Admin</a>
         </nav>
       </header>
-      {section === 'products' ? <ProductsPage /> : section === 'warehouses' ? <WarehousesPage /> : <ShippingAddressesPage />}
+      {admin && <nav className="admin-tabs" aria-label="Admin sections">
+        <a href="#/admin/warehouses" aria-current={route === '#/admin/warehouses' ? 'page' : undefined}>Warehouses</a>
+        <a href="#/admin/shipping-addresses" aria-current={route === '#/admin/shipping-addresses' ? 'page' : undefined}>Shipping addresses</a>
+        <a href="#/admin/products" aria-current={route === '#/admin/products' ? 'page' : undefined}>Products</a>
+      </nav>}
+      {admin ? (route === '#/admin/products' ? <ProductsPage /> : route === '#/admin/shipping-addresses'
+        ? <ShippingAddressesPage /> : <WarehousesPage />) : <OrdersPage key={route} route={route} />}
     </>
   );
 }

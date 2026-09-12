@@ -19,7 +19,11 @@ def to_domain(row: ShippingAddressRow) -> ShippingAddress:
         details=AddressDetails(
             **{field.name: getattr(row, field.name) for field in fields(AddressDetails)}
         ),
-        coordinates=Coordinates(latitude=row.latitude, longitude=row.longitude),
+        coordinates=(
+            Coordinates(latitude=row.latitude, longitude=row.longitude)
+            if row.latitude is not None and row.longitude is not None
+            else None
+        ),
         created_at=row.created_at,
         updated_at=row.updated_at,
         deleted_at=row.deleted_at,
@@ -49,20 +53,28 @@ class SqlAlchemyShippingAddressRepository:
         async with self.session.begin():
             return to_domain(await self._find(address_id))
 
-    async def create(self, details: AddressDetails, coordinates: Coordinates) -> ShippingAddress:
+    async def create(
+        self, details: AddressDetails, coordinates: Coordinates | None
+    ) -> ShippingAddress:
         async with self.session.begin():
-            row = ShippingAddressRow(**asdict(details), **asdict(coordinates))
+            row = ShippingAddressRow(
+                **asdict(details),
+                **(asdict(coordinates) if coordinates else {"latitude": None, "longitude": None}),
+            )
             self.session.add(row)
             await self.session.flush()
             result = to_domain(row)
         return result
 
     async def update(
-        self, address_id: int, details: AddressDetails, coordinates: Coordinates
+        self, address_id: int, details: AddressDetails, coordinates: Coordinates | None
     ) -> ShippingAddress:
         async with self.session.begin():
             row = await self._find(address_id)
-            for name, value in (asdict(details) | asdict(coordinates)).items():
+            for name, value in (
+                asdict(details)
+                | (asdict(coordinates) if coordinates else {"latitude": None, "longitude": None})
+            ).items():
                 setattr(row, name, value)
             await self.session.flush()
             await self.session.refresh(row)

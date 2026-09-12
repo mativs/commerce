@@ -1,6 +1,6 @@
 # Backend Assessment
 
-FastAPI + PostgreSQL API with a React admin app for warehouses, shipping addresses, and products.
+FastAPI + PostgreSQL API with a React order workspace and admin screens.
 
 ## Setup
 
@@ -16,10 +16,13 @@ The migrations also add 5 warehouses, 5 sample shipping addresses, and 100 produ
 
 ## Usage
 
-- Open the [admin app](http://localhost:5173) to create, edit, delete, and view change history for warehouses, shipping addresses, and products.
+- Open the [web app](http://localhost:5173) to create orders, edit items before checkout, enter shipping details, and view order results.
+- Use the Admin tab to manage warehouses, shipping addresses, and products.
 - Use the [API docs](http://localhost:8000/docs) to explore and try the endpoints.
 
-Warehouse and shipping address coordinates are assigned automatically using mock locations in Mar del Plata. Deleted records retain their audit history.
+Warehouse and admin shipping-address coordinates use mock locations in Mar del Plata. Order checkout also geocodes its own address snapshot. Deleted admin records retain their audit history.
+
+Use `POST /orders` in the API docs to place an order. See [order checkout](docs/orders.md) for the request, demo stock setup, and retry behavior.
 
 ## Development
 

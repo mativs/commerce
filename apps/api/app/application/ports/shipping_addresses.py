@@ -9,11 +9,11 @@ class ShippingAddressRepository(Protocol):
     async def get(self, address_id: int) -> ShippingAddress: ...
 
     async def create(
-        self, details: AddressDetails, coordinates: Coordinates
+        self, details: AddressDetails, coordinates: Coordinates | None
     ) -> ShippingAddress: ...
 
     async def update(
-        self, address_id: int, details: AddressDetails, coordinates: Coordinates
+        self, address_id: int, details: AddressDetails, coordinates: Coordinates | None
     ) -> ShippingAddress: ...
 
     async def delete(self, address_id: int) -> None: ...

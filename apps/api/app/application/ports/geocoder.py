@@ -4,7 +4,7 @@ from app.domain.shipping_address import AddressDetails, Coordinates
 
 
 class GeocodingUnavailable(Exception):
-    """An outbound geocoder could not resolve the address; no change should be saved."""
+    """An outbound geocoder could not resolve the address."""
 
 
 class Geocoder(Protocol):

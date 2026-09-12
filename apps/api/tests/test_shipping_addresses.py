@@ -172,7 +172,7 @@ def test_database_constraints_and_transactional_audit(database_client):
                 .all()
             )
             assert types == ["double precision", "double precision"]
-        for latitude, longitude in [(-91, 0), (91, 0), (0, -181), (0, 181), (None, 0), (0, None)]:
+        for latitude, longitude in [(-91, 0), (91, 0), (0, -181), (0, 181)]:
             async with sessions() as session:
                 with pytest.raises(IntegrityError):
                     await session.execute(
