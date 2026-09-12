@@ -67,7 +67,6 @@ class Product(TimestampMixin, Base):
     __table_args__ = (
         CheckConstraint("price >= 0 AND price < 'Infinity'::numeric", name="price_range"),
         CheckConstraint("sku = upper(btrim(sku)) AND length(sku) > 0", name="sku_normalized"),
-        CheckConstraint("currency ~ '^[A-Z]{3}$'", name="currency_format"),
         CheckConstraint("ean IS NULL OR ean ~ '^([0-9]{8}|[0-9]{13})$'", name="ean_format"),
     )
 
@@ -77,7 +76,6 @@ class Product(TimestampMixin, Base):
     ean: Mapped[str | None] = mapped_column(String(13), unique=True)
     description: Mapped[str | None] = mapped_column(String(2000))
     price: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
-    currency: Mapped[str] = mapped_column(String(3), nullable=False)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=true())
 
 

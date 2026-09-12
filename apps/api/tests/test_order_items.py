@@ -16,9 +16,7 @@ def item_data(order_models):
     async def setup():
         async with sessions() as session, session.begin():
             order = Order()
-            product = Product(
-                name="Snapshot test", sku="ITEM-TEST", price=Decimal("12.34"), currency="USD"
-            )
+            product = Product(name="Snapshot test", sku="ITEM-TEST", price=Decimal("12.34"))
             session.add_all([order, product])
             await session.flush()
             return order.id, product.id

@@ -44,9 +44,7 @@ def checkout(order_models, database_client):
     async def setup():
         async with sessions() as session, session.begin():
             products = [
-                Product(
-                    name=f"Product {i}", sku=f"CHECKOUT-{i}", price=Decimal("12.34"), currency="USD"
-                )
+                Product(name=f"Product {i}", sku=f"CHECKOUT-{i}", price=Decimal("12.34"))
                 for i in range(2)
             ]
             warehouses = [
@@ -316,9 +314,7 @@ def test_failed_finalization_rolls_back_stock_and_history(checkout):
     assert sum(s[3] for s in stock_rows(sessions)) == 4
 
 
-@pytest.mark.parametrize(
-    "change", ["currency='ARS'", "is_active=false", "deleted_at=clock_timestamp()"]
-)
+@pytest.mark.parametrize("change", ["is_active=false", "deleted_at=clock_timestamp()"])
 def test_product_eligibility(checkout, change):
     client, sessions, body, _ = checkout
 

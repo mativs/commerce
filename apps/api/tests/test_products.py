@@ -15,7 +15,6 @@ def test_catalog_is_read_only(database_client):
                 name="Shirt",
                 sku="SHIRT-M",
                 price=Decimal("19.99"),
-                currency="USD",
                 ean="5901234123458",
             )
             session.add(product)

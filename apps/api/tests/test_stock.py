@@ -32,9 +32,7 @@ def stock_data(database_client):
     async def setup():
         async with sessions() as session, session.begin():
             await (await session.connection()).run_sync(migrate)
-            product = Product(
-                name="Stock test", sku="STOCK-TEST", price=Decimal("1.00"), currency="USD"
-            )
+            product = Product(name="Stock test", sku="STOCK-TEST", price=Decimal("1.00"))
             session.add(product)
             await session.flush()
             return product.id

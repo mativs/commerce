@@ -127,9 +127,9 @@ class SqlAlchemyOrderRepository:
                 )
             )
             if len(products) != len(product_ids) or any(
-                p.deleted_at is not None or not p.is_active or p.currency != "USD" for p in products
+                p.deleted_at is not None or not p.is_active for p in products
             ):
-                raise InvalidOrder("Every product must exist, be active, and be priced in USD.")
+                raise InvalidOrder("Every product must exist and be active.")
             items = [
                 OrderItem(order_id=order_id, product_id=i.product_id, quantity=i.quantity)
                 for i in command.items

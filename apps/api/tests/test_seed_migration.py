@@ -51,7 +51,7 @@ def test_seed_data_and_audit(database_client):
         assert product["name"] == row["name"]
         assert product["price"] == str(row["price"])
         assert product["ean"] == row["ean"]
-        assert product["currency"] == "USD" and product["is_active"] is True
+        assert product["is_active"] is True
     assert len({product["ean"] for product in products}) == 100
     for path, records in [
         ("warehouses", warehouses),
@@ -72,7 +72,6 @@ def test_seed_conflict_is_atomic(database_client):
                     name="Existing product",
                     sku="ELEC-EMT-050-10",
                     price=Decimal("1.00"),
-                    currency="USD",
                 )
             )
 

@@ -20,7 +20,6 @@ class ProductOutput(BaseModel):
     sku: str
     description: str | None
     price: Decimal
-    currency: str
     is_active: bool
     ean: str | None
     id: int
@@ -95,7 +94,6 @@ async def list_products(
     offset: PageOffset = 0,
     q: Annotated[str | None, Query(max_length=255)] = None,
     is_active: bool | None = None,
-    currency: Annotated[str | None, Query(pattern=r"^[A-Z]{3}$")] = None,
 ):
     query = select(Product).where(Product.deleted_at.is_(None))
     if q and q.strip():
@@ -107,8 +105,6 @@ async def list_products(
         )
     if is_active is not None:
         query = query.where(Product.is_active == is_active)
-    if currency is not None:
-        query = query.where(Product.currency == currency)
     rows = await _products_with_stock(session, query, limit, offset)
     grouped: dict[int, tuple[Product, list[tuple[Stock, str]]]] = {}
     for product, stock, warehouse_name in rows:

@@ -84,14 +84,13 @@ export type Product = {
   sku: string;
   description: string | null;
   price: string;
-  currency: string;
   is_active: boolean;
   ean: string | null;
   stock: { warehouse_id: number; warehouse_name: string; on_hand: number; reserved: number; available: number }[];
   id: number; created_at: string; updated_at: string; deleted_at: string | null;
 };
 export const productApi = {
-  search: (q: string, offset: number, signal: AbortSignal) => request<Product[]>(`/products?limit=8&offset=${offset}&is_active=true&currency=USD&q=${encodeURIComponent(q)}`, { signal }),
+  search: (q: string, offset: number, signal: AbortSignal) => request<Product[]>(`/products?limit=8&offset=${offset}&is_active=true&q=${encodeURIComponent(q)}`, { signal }),
   get: (id: number, signal?: AbortSignal) => request<Product>(`/products/${id}`, { signal }),
 };
 
