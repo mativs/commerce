@@ -1,10 +1,11 @@
+from collections.abc import Sequence
 from datetime import datetime
 from decimal import Decimal
 from typing import Annotated
 
 from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import or_, select, text
+from sqlalchemy import and_, or_, select
 
 from app.adapters.inbound.http.dependencies import DatabaseSession, PageLimit, PageOffset
 from app.adapters.outbound.persistence.models import Product, Stock, Warehouse
@@ -37,23 +38,7 @@ class StockOutput(BaseModel):
     available: int
 
 
-async def product_output(session: DatabaseSession, product: Product) -> ProductOutput:
-    stock_exists = await session.scalar(text("SELECT to_regclass(current_schema() || '.stock')"))
-    if stock_exists is None:
-        rows = []
-    else:
-        rows = (
-            await session.execute(
-                select(Stock, Warehouse.name)
-                .join(Warehouse, Warehouse.id == Stock.warehouse_id)
-                .where(
-                    Stock.product_id == product.id,
-                    Stock.deleted_at.is_(None),
-                    Warehouse.deleted_at.is_(None),
-                )
-                .order_by(Warehouse.id)
-            )
-        ).all()
+def _product_output(product: Product, rows: Sequence[tuple[Stock, str]]) -> ProductOutput:
     output = ProductOutput.model_validate(product)
     output.stock = [
         StockOutput(
@@ -66,6 +51,34 @@ async def product_output(session: DatabaseSession, product: Product) -> ProductO
         for stock, warehouse_name in rows
     ]
     return output
+
+
+async def _products_with_stock(
+    session: DatabaseSession, query, limit: int, offset: int
+) -> Sequence[tuple[Product, Stock | None, str | None]]:
+    # Apply pagination before the joins so one product is never pushed to a
+    # different page by having balances in multiple warehouses.
+    page = query.order_by(Product.id).limit(limit).offset(offset).subquery("product_page")
+    statement = (
+        select(Product, Stock, Warehouse.name)
+        .join(page, Product.id == page.c.id)
+        .outerjoin(
+            Stock,
+            and_(
+                Stock.product_id == Product.id,
+                Stock.deleted_at.is_(None),
+            ),
+        )
+        .outerjoin(
+            Warehouse,
+            and_(
+                Warehouse.id == Stock.warehouse_id,
+                Warehouse.deleted_at.is_(None),
+            ),
+        )
+        .order_by(Product.id, Warehouse.id)
+    )
+    return (await session.execute(statement)).tuples().all()
 
 
 async def find_product(session: DatabaseSession, product_id: int) -> Product:
@@ -96,10 +109,32 @@ async def list_products(
         query = query.where(Product.is_active == is_active)
     if currency is not None:
         query = query.where(Product.currency == currency)
-    products = (await session.scalars(query.order_by(Product.id).limit(limit).offset(offset))).all()
-    return [await product_output(session, product) for product in products]
+    rows = await _products_with_stock(session, query, limit, offset)
+    grouped: dict[int, tuple[Product, list[tuple[Stock, str]]]] = {}
+    for product, stock, warehouse_name in rows:
+        entry = grouped.setdefault(product.id, (product, []))
+        if stock is not None and warehouse_name is not None:
+            entry[1].append((stock, warehouse_name))
+    return [_product_output(product, stock_rows) for product, stock_rows in grouped.values()]
 
 
 @router.get("/{product_id}", response_model=ProductOutput)
 async def get_product(product_id: int, session: DatabaseSession):
-    return await product_output(session, await find_product(session, product_id))
+    product = await find_product(session, product_id)
+    rows = (
+        (
+            await session.execute(
+                select(Stock, Warehouse.name)
+                .join(Warehouse, Warehouse.id == Stock.warehouse_id)
+                .where(
+                    Stock.product_id == product.id,
+                    Stock.deleted_at.is_(None),
+                    Warehouse.deleted_at.is_(None),
+                )
+                .order_by(Warehouse.id)
+            )
+        )
+        .tuples()
+        .all()
+    )
+    return _product_output(product, rows)
