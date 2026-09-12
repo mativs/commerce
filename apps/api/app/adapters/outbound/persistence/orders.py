@@ -125,17 +125,19 @@ class SqlAlchemyOrderRepository:
                 return await self._view(row), False
             product_ids = [item.product_id for item in command.items]
             # Shared locks preserve catalog price/eligibility until snapshots and total are saved.
-            products = list(
+            eligible_product_ids = list(
                 await self.session.scalars(
-                    select(Product)
-                    .where(Product.id.in_(product_ids))
+                    select(Product.id)
+                    .where(
+                        Product.id.in_(product_ids),
+                        Product.deleted_at.is_(None),
+                        Product.is_active.is_(True),
+                    )
                     .order_by(Product.id)
                     .with_for_update(read=True)
                 )
             )
-            if len(products) != len(product_ids) or any(
-                p.deleted_at is not None or not p.is_active for p in products
-            ):
+            if len(eligible_product_ids) != len(product_ids):
                 raise InvalidOrder("Every product must exist and be active.")
             items = [
                 OrderItem(order_id=order_id, product_id=i.product_id, quantity=i.quantity)
@@ -208,16 +210,19 @@ class SqlAlchemyOrderRepository:
             )
             if warehouse is None:
                 return False
-            products = list(
+            product_ids = list(
                 await self.session.scalars(
-                    select(Product)
-                    .where(Product.id.in_(quantities))
+                    select(Product.id)
+                    .where(
+                        Product.id.in_(quantities.keys()),
+                        Product.deleted_at.is_(None),
+                        Product.is_active.is_(True),
+                    )
                     .order_by(Product.id)
                     .with_for_update(read=True)
-                    .execution_options(populate_existing=True)
                 )
             )
-            if any(p.deleted_at is not None or not p.is_active for p in products):
+            if len(product_ids) != len(quantities):
                 return False
             stocks = list(
                 await self.session.scalars(
