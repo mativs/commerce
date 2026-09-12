@@ -118,6 +118,8 @@ class SqlAlchemyOrderRepository:
                     .where(Order.order_idempotency_key == order_idempotency_key)
                     .with_for_update(read=True)
                 )
+                if row is None:
+                    raise RuntimeError("Order idempotency conflict without an existing order.")
                 if row.request_hash != fingerprint:
                     raise IdempotencyConflict("This idempotency key belongs to a different order.")
                 return await self._view(row), False
