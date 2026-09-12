@@ -17,7 +17,7 @@ The migrations also add 5 warehouses and 100 products priced in USD, with varied
 ## Usage
 
 - Open the [web app](http://localhost:5173) to create orders, edit items before checkout, enter shipping details, and view order results.
-- Use the Admin tab to manage warehouses and products.
+- Use the Admin tab to manage warehouses.
 - Use the [API docs](http://localhost:8000/docs) to explore and try the endpoints.
 
 Warehouse coordinates use mock locations in Mar del Plata. Order checkout geocodes its own address snapshot. Deleted admin records retain their audit history.

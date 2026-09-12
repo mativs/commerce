@@ -8,17 +8,13 @@ from sqlalchemy import text
     "path,payload",
     [
         ("warehouses", {"name": "Pagination warehouse"}),
-        (
-            "products",
-            {"name": "Pagination product", "sku": "PAGE", "price": "1.00", "currency": "USD"},
-        ),
     ],
 )
 def test_pages_and_logs(database_client, path, payload):
     client, _ = database_client
     ids = []
     for i in range(4):
-        data = {**payload, **({"sku": f"PAGE-{i}"} if path == "products" else {})}
+        data = payload
         response = client.post(f"/{path}", json=data)
         assert response.status_code == 201
         ids.append(response.json()["id"])

@@ -53,8 +53,6 @@ textarea:focus-visible { outline: 3px solid #187047; outline-offset: 2px; }
 .warehouse-list li > .actions { flex-shrink: 0; }
 h3 { font-size: 0.95rem; }
 
-.checkbox-label { flex-direction: row; align-items: center; }
-.checkbox-label input { width: auto; }
 
 /* Orders are the primary workspace; admin keeps its compact maintenance screens. */
 .commerce-header { display: flex; align-items: center; justify-content: space-between; gap: 20px; background: #fff; border-bottom: 1px solid #dce3df; padding: 22px max(24px, calc((100vw - 1152px) / 2)); }

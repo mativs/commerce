@@ -1,5 +1,6 @@
 import asyncio
 import importlib.util
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -8,22 +9,13 @@ from alembic.operations import Operations
 from sqlalchemy import select, text
 from sqlalchemy.exc import IntegrityError
 
-from app.adapters.outbound.persistence.models import Stock
+from app.adapters.outbound.persistence.models import Product, Stock
 
 
 @pytest.fixture
 def stock_data(database_client):
     client, sessions = database_client
     warehouse = client.post("/warehouses", json={"name": "Stock test"}).json()
-    product = client.post(
-        "/products",
-        json={
-            "name": "Stock test",
-            "sku": "STOCK-TEST",
-            "price": "1.00",
-            "currency": "USD",
-        },
-    ).json()
 
     def migrate(connection):
         connection.execute(
@@ -40,9 +32,15 @@ def stock_data(database_client):
     async def setup():
         async with sessions() as session, session.begin():
             await (await session.connection()).run_sync(migrate)
+            product = Product(
+                name="Stock test", sku="STOCK-TEST", price=Decimal("1.00"), currency="USD"
+            )
+            session.add(product)
+            await session.flush()
+            return product.id
 
-    asyncio.run(setup())
-    return sessions, {"warehouse_id": warehouse["id"], "product_id": product["id"]}
+    product_id = asyncio.run(setup())
+    return sessions, {"warehouse_id": warehouse["id"], "product_id": product_id}
 
 
 def test_stock_defaults_update_and_audit(stock_data):

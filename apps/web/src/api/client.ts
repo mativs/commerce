@@ -79,27 +79,20 @@ export type ShippingAddressInput = {
   delivery_instructions: string | null;
 };
 
-export type ProductInput = {
+export type Product = {
   name: string;
   sku: string;
   description: string | null;
   price: string;
   currency: string;
   is_active: boolean;
-};
-export type Product = ProductInput & {
   ean: string | null;
   stock: { warehouse_id: number; warehouse_name: string; on_hand: number; reserved: number; available: number }[];
   id: number; created_at: string; updated_at: string; deleted_at: string | null;
 };
 export const productApi = {
   search: (q: string, offset: number, signal: AbortSignal) => request<Product[]>(`/products?limit=8&offset=${offset}&is_active=true&currency=USD&q=${encodeURIComponent(q)}`, { signal }),
-  list: (signal: AbortSignal, offset = 0, limit = 20) => request<Product[]>(`/products?limit=${limit}&offset=${offset}`, { signal }),
   get: (id: number, signal?: AbortSignal) => request<Product>(`/products/${id}`, { signal }),
-  create: (data: ProductInput) => request<Product>('/products', { method: 'POST', body: JSON.stringify(data) }),
-  update: (id: number, data: ProductInput) => request<Product>(`/products/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
-  remove: (id: number) => request<void>(`/products/${id}`, { method: 'DELETE' }),
-  logs: (id: number, offset = 0) => request<AuditLog<Product>[]>(`/products/${id}/logs?limit=20&offset=${offset}`),
 };
 
 
