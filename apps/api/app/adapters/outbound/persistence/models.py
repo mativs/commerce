@@ -132,7 +132,10 @@ class Order(Base):
     shipping_address: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
     latitude: Mapped[float | None] = mapped_column(Float)
     longitude: Mapped[float | None] = mapped_column(Float)
-    idempotency_key: Mapped[str | None] = mapped_column(String(128), unique=True)
+    order_idempotency_key: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
+    payment_idempotency_key: Mapped[str] = mapped_column(
+        String(128), unique=True, nullable=False
+    )
     request_hash: Mapped[str | None] = mapped_column(String(64))
     failure_reason: Mapped[str | None] = mapped_column(String(40))
     payment_description: Mapped[str | None] = mapped_column(String(255))

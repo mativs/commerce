@@ -1,5 +1,6 @@
 import asyncio
 import inspect
+from uuid import uuid4
 
 from app.application.ports.geocoder import Geocoder, GeocodingUnavailable
 from app.application.ports.orders import OrderRepository
@@ -13,8 +14,11 @@ class OrderService:
         self.geocoder = geocoder
         self.payment = payment
 
-    async def create(self, command: CreateOrder, key: str) -> OrderView:
-        order, created = await self.repository.create(command, key)
+    async def create(self, command: CreateOrder, order_idempotency_key: str) -> OrderView:
+        payment_idempotency_key = f"payment:{uuid4()}"
+        order, created = await self.repository.create(
+            command, order_idempotency_key, payment_idempotency_key
+        )
         if not created:
             # Replays observe durable state; they never start another payment/booking attempt.
             return order
@@ -43,10 +47,14 @@ class OrderService:
                 parameters = inspect.signature(charge).parameters
                 if parameters and next(iter(parameters)).lower() in {"payment", "details"}:
                     result = await charge(
-                        command.payment, order.total_amount, idempotency_key=f"order:{key}"
+                        command.payment,
+                        order.total_amount,
+                        idempotency_key=payment_idempotency_key,
                     )
                 else:  # Compatibility with simple test/demonstration gateways.
-                    result = await charge(order.total_amount, idempotency_key=f"order:{key}")
+                    result = await charge(
+                        order.total_amount, idempotency_key=payment_idempotency_key
+                    )
         except (PaymentUnavailable, TimeoutError):
             # Do not release inventory for a payment that may have succeeded.
             return await self.repository.get(order.id)

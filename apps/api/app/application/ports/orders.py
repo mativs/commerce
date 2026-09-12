@@ -5,7 +5,9 @@ from app.domain.shipping import Coordinates
 
 
 class OrderRepository(Protocol):
-    async def create(self, command: CreateOrder, key: str) -> tuple[OrderView, bool]: ...
+    async def create(
+        self, command: CreateOrder, order_idempotency_key: str, payment_idempotency_key: str
+    ) -> tuple[OrderView, bool]: ...
 
     async def locate(self, order_id: int, coordinates: Coordinates) -> None: ...
 

@@ -1,7 +1,10 @@
 # Order checkout
 
 `POST /orders` accepts the complete address and items. Send a unique `Idempotency-Key`
-header for each new order; reuse it with the same payload after a network failure.
+header for each new order; reuse it with the same payload after a network failure. This
+client-owned key identifies the order request only. Payment uses a separate, server-owned
+idempotency key derived from the saved order ID, so clients cannot choose or collide with
+payment identities.
 Duplicate products are combined after each quantity is validated. Prices and totals
 are calculated from active USD products; status, warehouse, prices, and coordinates
 are not accepted as input.

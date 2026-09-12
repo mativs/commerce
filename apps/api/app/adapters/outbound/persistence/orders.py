@@ -90,7 +90,9 @@ class SqlAlchemyOrderRepository:
             history=[StatusChange(h.status, h.reason, h.created_at) for h in history],
         )
 
-    async def create(self, command: CreateOrder, key: str) -> tuple[OrderView, bool]:
+    async def create(
+        self, command: CreateOrder, order_idempotency_key: str, payment_idempotency_key: str
+    ) -> tuple[OrderView, bool]:
         fingerprint = hashlib.sha256(
             json.dumps(asdict(command), sort_keys=True).encode()
         ).hexdigest()
@@ -101,17 +103,20 @@ class SqlAlchemyOrderRepository:
                 .values(
                     shipping_address=asdict(command.shipping_address),
                     notes=command.notes,
-                    idempotency_key=key,
+                    order_idempotency_key=order_idempotency_key,
+                    payment_idempotency_key=payment_idempotency_key,
                     request_hash=fingerprint,
                     payment_description=command.payment.description,
                     credit_card_number=command.payment.credit_card_number,
                 )
-                .on_conflict_do_nothing(index_elements=[Order.idempotency_key])
+                .on_conflict_do_nothing(index_elements=[Order.order_idempotency_key])
                 .returning(Order.id)
             )
             if order_id is None:
                 row = await self.session.scalar(
-                    select(Order).where(Order.idempotency_key == key).with_for_update(read=True)
+                    select(Order)
+                    .where(Order.order_idempotency_key == order_idempotency_key)
+                    .with_for_update(read=True)
                 )
                 if row.request_hash != fingerprint:
                     raise IdempotencyConflict("This idempotency key belongs to a different order.")

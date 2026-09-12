@@ -98,6 +98,9 @@ def test_checkout_snapshots_duplicates_history_and_replay(checkout):
     assert order["status"] == "PAID" and order["warehouse_id"] == warehouses[0]
     assert order["payment_description"] == "Demo checkout"
     assert order["payment_identifier"].startswith("pay_")
+    payment_key = client.app.state.payment_gateway.charge.call_args.kwargs["idempotency_key"]
+    assert payment_key.startswith("payment:")
+    assert payment_key != "one"
     assert order["customer"]["email"] == "ana@example.com"
     assert order["total_amount"] == "74.04"
     assert [i["quantity"] for i in order["items"]] == [4, 2]
@@ -242,8 +245,8 @@ def test_stale_candidates_fall_back_and_release_once(checkout):
         )
         async with sessions() as s1, sessions() as s2:
             repo1, repo2 = SqlAlchemyOrderRepository(s1), SqlAlchemyOrderRepository(s2)
-            first, _ = await repo1.create(command, "a")
-            second, _ = await repo2.create(command, "b")
+            first, _ = await repo1.create(command, "a", "payment:first")
+            second, _ = await repo2.create(command, "b", "payment:second")
             assert len(await repo1.candidates(first.id)) == 2
             assert len(await repo2.candidates(second.id)) == 2
             outcomes = await asyncio.gather(
@@ -281,7 +284,7 @@ def test_failed_finalization_rolls_back_stock_and_history(checkout):
         )
         async with sessions() as session:
             repository = SqlAlchemyOrderRepository(session)
-            order, _ = await repository.create(command, "rollback")
+            order, _ = await repository.create(command, "rollback", "payment:rollback")
             assert await repository.reserve(order.id, warehouses[0])
             async with session.begin():
                 await session.execute(
