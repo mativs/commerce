@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock
 
 import pytest
 from sqlalchemy import select, text
-from test_order_models import order_models as order_models
 
 from app.adapters.outbound.persistence.models import Product, Stock, Warehouse
 from app.adapters.outbound.persistence.orders import SqlAlchemyOrderRepository
@@ -29,9 +28,8 @@ ADDRESS = {
 
 
 @pytest.fixture
-def checkout(order_models, database_client):
-    sessions = order_models
-    client, _ = database_client
+def checkout(database_client):
+    client, sessions = database_client
     client.app.state.order_geocoder = AsyncMock()
     client.app.state.order_geocoder.geocode.return_value = Coordinates(
         latitude=-38, longitude=-57.57

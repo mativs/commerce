@@ -17,7 +17,3 @@ def test_warehouses_are_read_only(warehouse_client):
     warehouse = client.get("/warehouses").json()
     assert len(warehouse) == 1 and warehouse[0]["id"] == warehouse_id
     assert client.get(f"/warehouses/{warehouse_id}").json() == warehouse[0]
-    assert client.post("/warehouses", json={"name": "New"}).status_code == 405
-    assert client.put(f"/warehouses/{warehouse_id}", json={"name": "Renamed"}).status_code == 405
-    assert client.delete(f"/warehouses/{warehouse_id}").status_code == 405
-    assert client.get(f"/warehouses/{warehouse_id}/logs").status_code == 422

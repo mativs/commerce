@@ -4,18 +4,20 @@ from decimal import Decimal
 import pytest
 from sqlalchemy import text
 from sqlalchemy.exc import DBAPIError, IntegrityError
-from test_order_models import order_models as order_models
 
 from app.adapters.outbound.persistence.models import Order, OrderItem, Product
 
 
 @pytest.fixture
-def item_data(order_models):
-    sessions = order_models
+def item_data(database_client):
+    _, sessions = database_client
 
     async def setup():
         async with sessions() as session, session.begin():
-            order = Order()
+            order = Order(
+                order_idempotency_key="item-order",
+                payment_idempotency_key="item-payment",
+            )
             product = Product(name="Snapshot test", sku="ITEM-TEST", price=Decimal("12.34"))
             session.add_all([order, product])
             await session.flush()
