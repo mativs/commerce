@@ -4,7 +4,7 @@
 
 **No duplicate orders. No duplicate payments. Consistent inventory balances.** Physical stock, reservations, and availability must remain consistent under concurrent checkouts, retries, and failures. An unknown payment outcome must not release inventory. These requirements determine the transaction boundaries and retry behavior.
 
-Checkout runs synchronously within the HTTP request. Each database stage commits independently; external calls run between transactions. There is no queue, webhook handler, or recovery worker. The lifecycle makes interrupted work visible, but recovery is still unimplemented.
+Checkout runs synchronously within the HTTP request. Each database stage commits independently; external calls run between transactions. The lifecycle and manual monitoring make interrupted work visible. Queues, webhook handling, and automatic recovery are intentionally outside this exercise's scope; a pending response does not start background work.
 
 ```text
 CREATED → BOOKED → PAYING → PAID
@@ -142,6 +142,8 @@ A geocoding timeout or unavailable response cancels the order with `GEOCODING_FA
 
 **Decision:** a slow external service must not hold database locks. The geocoder is an async interface with a mock adapter, so a real provider can be added without moving HTTP concerns into checkout rules.
 
+There is no separate `GEOCODING` status: the lookup neither charges the customer nor reserves stock. `CREATED` and the saved coordinates describe the durable progress needed here. A dedicated status could provide finer operational visibility, but is not needed for the checkout guarantees.
+
 ## 5. Rank warehouses and save the evidence
 
 The repository finds non-deleted warehouses with enough available stock for **every** requested item:
@@ -217,8 +219,11 @@ The mock waits two seconds, succeeds, and derives a stable payment reference fro
 | Success | Lock the order; if still `PAYING`, save the provider reference and set `PAID`. | Keep reserved. |
 | Definitive decline | Lock the order and stock, release the reservation, record `PAYMENT_FAILED`, and set `CANCELLED` in one transaction. | Release exactly once. |
 | Timeout or provider unavailable | Return the saved `PAYING` order. | Keep reserved. |
+| Invalid response, including success without a valid reference | Return the saved `PAYING` order and log `PAYMENT_RESPONSE_INVALID`. | Keep reserved. |
 
 **A timeout is not a decline.** Releasing stock after an unknown outcome could sell inventory already paid for by this customer. The cost of preserving it is reduced availability until reconciliation.
+
+A successful gateway response must include a string reference that is nonblank and no longer than 128 characters. Missing, blank, or oversized references are incomplete evidence of success, not a definitive decline. They produce `202` with `PAYING`; a same-key replay returns that state without charging again.
 
 Cancellation checks the current state before releasing anything. It locks stock in product-ID order and verifies that the reservation can be released in full. An inconsistent reservation raises an error and rolls back cancellation; it does not silently subtract a partial amount. Already paid or cancelled orders are not cancelled again by this method. Payment finalization only changes orders still in `PAYING`.
 
@@ -256,7 +261,7 @@ Successful order responses include `Location: /orders/{id}`, items, chronologica
 
 A database error rolls back the current transaction, not earlier commits. A provider can confirm payment while the local order still says `PAYING` if finalization fails.
 
-**Recovery is the missing piece.** A future worker must inspect the saved stage, reconcile any possible charge using the original payment identity, and make guarded state changes. Simply posting the order again does not perform that work. Never replace an uncertain attempt with a new key just to make it proceed.
+**Recovery is intentionally outside this exercise's scope.** The implementation preserves committed progress and detects stalled orders when monitoring is run. It does not query the payment provider, reconcile charges, or resume interrupted work. The gateway currently exposes only charging; the saved `payment:<UUID>` is the identity a future provider lookup would use. A recovery implementation would inspect the saved stage, establish any possible charge's outcome, and make guarded state changes. Simply posting the order again does not perform that work. Never replace an uncertain attempt with a new key just to make it proceed.
 
 ## Verify failures and concurrency
 
@@ -297,7 +302,7 @@ Tests create and remove temporary schemas against the migrated database. `make c
 
 ## Monitor what checkout leaves behind
 
-Monitoring detects stalled work and inconsistent data. It saves reports; it never charges, cancels, releases stock, or repairs orders.
+Monitoring detects stalled work and inconsistent data. It saves reports; it never charges, cancels, releases stock, or repairs orders. Runs must be requested manually. Scheduling and automatic notification delivery are outside scope, so an interrupted request does not by itself trigger a monitoring run or an outbound alert.
 
 Open **Monitoring → Run checks**, or run:
 

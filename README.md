@@ -114,7 +114,7 @@ Order rows are locked for state changes. Stock rows are exclusively locked in pr
 
 **Network calls never hold inventory locks.** Geocoding and payment run outside database transactions. A later failure leaves earlier commits intact. This allows an order to survive an interrupted checkout, but requires recovery across stages.
 
-**A timeout is not a decline.** A definitive rejection cancels the order and releases stock. An unknown payment outcome leaves it `PAYING`, with stock reserved. There is no recovery worker or webhook handler yet. Reconciliation must confirm the provider's outcome using the saved payment identity before changing reservations.
+**A timeout is not a decline.** A definitive rejection cancels the order and releases stock. An unknown payment outcome leaves it `PAYING`, with stock reserved. This includes an invalid gateway response or a claimed success without a nonblank provider reference of at most 128 characters. Reconciliation must confirm the provider's outcome using the saved payment identity before changing reservations; provider lookup and recovery are outside this exercise's scope.
 
 ### Store the facts that matter
 
@@ -141,7 +141,7 @@ Order rows are locked for state changes. Stock rows are exclusively locked in pr
 
 - **Assessment demo:** no authentication or real payment integration. Test card numbers are stored in the database and temporarily in browser session storage for pending checkout retries. Real payments require provider tokenization.
 - **One warehouse per order.** No split shipments, taxes, shipping rates, fulfillment, refunds, or replenishment UI. Products and warehouses are read-only through the API.
-- **Monitoring detects; it does not repair.** Runs are manual, with saved findings and execution history. A completed run can still contain errors. Interrupted orders require reconciliation; replaying a request does not restart processing.
+- **Interrupted work is detected, not automatically recovered.** Monitoring runs are manual, with saved findings and execution history. There is no scheduler or automatic notification delivery, and a completed run can still contain errors. Provider lookup, reconciliation, recovery workers, and webhook handling are intentionally outside this exercise's scope. The saved payment identity supports a future provider lookup; no such lookup runs today. Replaying a request returns its saved state without restarting processing.
 - **Finite demo stock.** Successful and pending orders retain reservations. Re-running migrations does not replenish stock; enough repeated checkouts will exhaust it.
 
 ## Development
