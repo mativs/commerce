@@ -159,9 +159,9 @@ def test_failures_are_durable(checkout, failure, reason, history, reserved):
     else:
         client.app.state.payment_gateway.charge.side_effect = PaymentUnavailable()
     response = client.post("/orders", json=body, headers={"Idempotency-Key": failure})
-    assert response.status_code == (
-        202 if failure in ("unknown", "invalid") else 201
-    ), response.text
+    assert response.status_code == (202 if failure in ("unknown", "invalid") else 201), (
+        response.text
+    )
     order = response.json()
     assert order["customer"]["email"] == "ana@example.com"
     assert [h["status"] for h in order["history"]] == history
@@ -199,9 +199,7 @@ def test_invalid_provider_reference_is_unknown_checkout_outcome(checkout, refere
     assert [h["status"] for h in order["history"]] == ["CREATED", "BOOKED", "PAYING"]
     assert sum(s[3] for s in stock_rows(sessions)) == 4
 
-    replay = client.post(
-        "/orders", json=body, headers={"Idempotency-Key": "invalid-reference"}
-    )
+    replay = client.post("/orders", json=body, headers={"Idempotency-Key": "invalid-reference"})
     assert replay.status_code == 202
     assert replay.json() == order
     client.app.state.payment_gateway.charge.assert_awaited_once()

@@ -27,6 +27,7 @@ def test_mock_payment_always_succeeds_with_delay_and_stable_reference():
             assert all(isinstance(outcome, PaymentSucceeded) for outcome in outcomes)
             assert sleep.await_count == 40
             sleep.assert_awaited_with(2)
+
     asyncio.run(check())
 
 

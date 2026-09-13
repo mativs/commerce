@@ -441,5 +441,6 @@ class SqlAlchemyOrderRepository:
                     items_by_order[row.id],
                     history_by_order[row.id],
                 )
-                for row in rows if row is not None
+                for row in rows
+                if row is not None
             ]
