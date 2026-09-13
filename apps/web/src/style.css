@@ -135,3 +135,24 @@ h3 { font-size: 0.95rem; }
 .inventory-breakdown > td { background: #f6f9f7; padding: 12px; }
 .inventory-breakdown table { width: 100%; }
 @media (max-width: 700px) { .inventory-filters { grid-template-columns: 1fr; gap: 0; } }
+
+.monitor-dialog { width: min(640px, calc(100% - 32px)); max-height: 90vh; overflow-y: auto; border: 1px solid #bccbc3; border-radius: 14px; padding: 28px; color: #172b36; }
+.monitor-dialog::backdrop { background: #172b3670; }
+.monitor-check-group { margin-top: 24px; }
+.monitor-check-group legend { font-weight: 700; margin-bottom: 14px; }
+.monitor-checkbox { display: flex; flex-direction: row; align-items: flex-start; gap: 12px; margin-bottom: 16px; font-size: .9rem; }
+.monitor-checkbox input { width: 18px; height: 18px; flex-shrink: 0; accent-color: #187047; }
+.monitor-dialog summary { cursor: pointer; font-weight: 600; padding: 12px 0; }
+.monitor-dialog-footer { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
+.monitor-toolbar { margin-bottom: 24px; }
+.monitor-summary { display: grid; grid-template-columns: 1fr 1fr 2fr 1fr; gap: 20px; }
+.monitor-summary strong { font-size: 1.5rem; }
+.monitor-status-completed { background: #eaf0f4; color: #38576b; }
+.monitor-status-partial, .monitor-status-running { background: #fff0d4; color: #835716; }
+.monitor-status-failed, .monitor-status-interrupted { background: #fbe9e7; color: #973a30; }
+.monitor-checks { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.monitor-check { display: flex; flex-direction: column; gap: 8px; text-align: left; background: white; }
+.monitor-check[aria-pressed="true"] { border-color: #187047; background: #eaf1ec; box-shadow: inset 0 0 0 1px #187047; }
+.monitor-check span, .monitor-check small { font-size: .85rem; }
+.monitoring-main td { line-height: 1.5; }
+@media (max-width: 700px) { .monitor-summary { grid-template-columns: 1fr 1fr; } .monitor-checks { grid-template-columns: 1fr; } .commerce-header { flex-wrap: wrap; } .commerce-header nav { flex-wrap: wrap; } }

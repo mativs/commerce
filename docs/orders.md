@@ -95,3 +95,85 @@ the order. Out-of-stock and reservation failures use actual inventory conditions
 wired in the HTTP dependency factory. The order service and SQL repository contain
 no simulation logic. Notes remain saved on the order; retries with the same
 idempotency key observe the saved result without rerunning the scenario.
+
+
+### Payment initiation and manual validation
+
+New checkouts follow `CREATED → BOOKED → PAYING → PAID`. `PAYING` is committed
+immediately before the gateway call; its history timestamp records local initiation,
+not confirmation that the provider received the request. Declines cancel with
+`PAYMENT_FAILED`; timeouts and unavailable responses remain `PAYING`. `BOOKED`,
+`PAYING`, and `PAID` retain stock. Existing `BOOKED` orders are not reclassified.
+
+Trigger a synchronous, read-only order validation run:
+
+```sh
+curl -X POST http://localhost:8000/order-validation-runs \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: validation-example-1' \
+  -d '{}'
+```
+
+An empty object runs all checks. To select checks and thresholds:
+
+```json
+{
+  "checks": ["ORDER_TOTAL_MISMATCH", "PAYMENT_NOT_STARTED", "PAYMENT_PENDING_TOO_LONG"],
+  "thresholds": {
+    "created_age_seconds": 300,
+    "booked_age_seconds": 300,
+    "payment_age_seconds": 300
+  }
+}
+```
+
+All thresholds default to 300 seconds and accept 1–604800 seconds. Checks scan all
+orders; inventory checks always compare complete warehouse/product totals.
+
+| Check | Finding |
+| --- | --- |
+| `ORDER_TOTAL_MISMATCH` | Saved total differs from sum of saved unit prices × quantities. |
+| `ORDER_STUCK_CREATED` | Latest `CREATED` history entry exceeds its age threshold. |
+| `PAYMENT_NOT_STARTED` | Latest `BOOKED` entry exceeds its threshold; no recorded payment initiation. Historical orders may already have attempted payment. |
+| `PAYMENT_PENDING_TOO_LONG` | Latest `PAYING` entry exceeds its threshold. |
+| `PAID_WITHOUT_REFERENCE` | Paid order has no payment reference. |
+| `INVENTORY_RESERVATION_MISMATCH` | Stock reserved differs from `BOOKED` + `PAYING` + `PAID` quantities, including missing stock rows. |
+| `INVALID_ORDER_STRUCTURE` | Empty/invalid items, or missing warehouse/coordinates in a stock-holding state. |
+| `INCONSISTENT_STATUS_HISTORY` | Invalid transition, missing history, latest/current status mismatch, or inconsistent cancellation reason. Legacy `BOOKED → PAID` remains accepted. |
+
+`POST` returns `201` and `Location` for a new run; replaying the same key and
+parameters returns `200` with the existing run. Different parameters with that key,
+or another execution holding the database lock, return `409`. Unknown checks return
+`422`. A completed execution can contain findings: inspect `finding_count` and each
+check, not just the run status.
+
+- `GET /order-validation-runs?limit=50&offset=0`: run history and finding counts.
+- `GET /order-validation-runs/{id}`: parameters, timestamps, rules version and checks.
+- `GET /order-validation-runs/{id}/findings`: paginated evidence; optional `check`,
+  `severity` (`ERROR`/`WARNING`), and `order_id` filters.
+
+Each check commits its findings independently and reads one database statement
+snapshot. Different checks may observe different moments during concurrent checkout.
+Check statements have a five-second timeout; after the 30-second execution budget,
+remaining checks are skipped and the run is partial (or failed if none completed).
+An abrupt process failure can leave a running record; the next new invocation marks
+abandoned runs interrupted after acquiring the execution lock. There is no scheduler.
+
+This job never charges, cancels, or repairs orders. It does not verify actual provider
+transactions, duplicate charges, charged amounts, or currency, and does not create
+payment-attempt or reservation tables. Findings contain identifiers and diagnostic
+values, not card numbers or customer/address snapshots.
+
+### Monitoring interface
+
+Open **Monitoring** in the main navigation to view saved runs or choose **Run checks**.
+The dialog selects all eight checks by default and lets you change stage thresholds
+in seconds. Results separate execution status from error/warning totals, summarize
+each check, and filter findings by check or severity. Order and warehouse links open
+the affected records; observations describe the state at the time of the run.
+
+**Run again** opens the previous selection and thresholds for review. If the POST
+response is lost, **Check run status** reuses the saved request identity rather than
+creating a duplicate run. That pending identity is retained for the browser tab across
+reloads. Running result pages refresh automatically; historical pages offer manual
+refresh. No repair or payment actions are exposed.

@@ -207,3 +207,58 @@ class OrderItem(Base):
     unit_price: Mapped[Decimal] = mapped_column(
         Numeric(12, 2), nullable=False, server_default=FetchedValue()
     )
+
+
+class OrderValidationRun(Base):
+    __tablename__ = "order_validation_runs"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('RUNNING','COMPLETED','PARTIAL','FAILED','INTERRUPTED')",
+            name="status_valid",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    idempotency_key: Mapped[str] = mapped_column(String(128), unique=True)
+    parameters: Mapped[dict] = mapped_column(JSONB)
+    rules_version: Mapped[int] = mapped_column(server_default="1")
+    status: Mapped[str] = mapped_column(String(20))
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.clock_timestamp()
+    )
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class OrderValidationCheckResult(Base):
+    __tablename__ = "order_validation_check_results"
+    __table_args__ = (
+        UniqueConstraint("run_id", "check_code"),
+        CheckConstraint(
+            "status IN ('PENDING','RUNNING','COMPLETED','FAILED','SKIPPED')", name="status_valid"
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    run_id: Mapped[int] = mapped_column(ForeignKey("order_validation_runs.id"))
+    check_code: Mapped[str] = mapped_column(String(80))
+    status: Mapped[str] = mapped_column(String(20))
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finding_count: Mapped[int] = mapped_column(server_default="0")
+    error: Mapped[str | None] = mapped_column(String(255))
+
+
+class OrderValidationFinding(Base):
+    __tablename__ = "order_validation_findings"
+    __table_args__ = (Index("ix_validation_findings_check", "check_result_id", "id"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    check_result_id: Mapped[int] = mapped_column(ForeignKey("order_validation_check_results.id"))
+    order_id: Mapped[int | None]
+    warehouse_id: Mapped[int | None]
+    product_id: Mapped[int | None]
+    severity: Mapped[str] = mapped_column(String(20))
+    evidence: Mapped[dict] = mapped_column(JSONB)
+    observed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.clock_timestamp()
+    )

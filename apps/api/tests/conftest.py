@@ -56,7 +56,16 @@ def database_client():
                     "EXECUTE FUNCTION public.audit_record_change()"
                 )
             )
-            for table in ("stock", "customers", "orders", "order_status_history", "order_items"):
+            for table in (
+                "stock",
+                "customers",
+                "orders",
+                "order_status_history",
+                "order_items",
+                "order_validation_runs",
+                "order_validation_check_results",
+                "order_validation_findings",
+            ):
                 await connection.execute(
                     text(f'CREATE TABLE "{schema}".{table} (LIKE public.{table} INCLUDING ALL)')
                 )
@@ -69,8 +78,7 @@ def database_client():
                 for constraint in constraints:
                     await connection.execute(
                         text(
-                            f'ALTER TABLE "{schema}".{table} '
-                            f"DROP CONSTRAINT IF EXISTS {constraint}"
+                            f'ALTER TABLE "{schema}".{table} DROP CONSTRAINT IF EXISTS {constraint}'
                         )
                     )
             await connection.execute(

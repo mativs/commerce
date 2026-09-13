@@ -137,3 +137,19 @@ export const orderApi = {
     method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify(data),
   }, 30000),
 };
+
+export type ValidationParameters = { checks: string[]; thresholds: { created_age_seconds: number; booked_age_seconds: number; payment_age_seconds: number } };
+export type ValidationCheck = { id: number; check_code: string; status: string; started_at: string | null; finished_at: string | null; finding_count: number; error: string | null };
+export type ValidationRun = { id: number; status: string; started_at: string; finished_at: string | null; finding_count: number; error_count: number; warning_count: number; parameters: ValidationParameters; checks?: ValidationCheck[] };
+export type ValidationFinding = { id: number; check_code: string; severity: string; order_id: number | null; warehouse_id: number | null; product_id: number | null; observed_at: string; evidence: Record<string, unknown> };
+export const monitoringApi = {
+  list: (offset: number, signal: AbortSignal) => request<ValidationRun[]>(`/order-validation-runs?limit=20&offset=${offset}`, { signal }),
+  get: (id: number, signal: AbortSignal) => request<ValidationRun>(`/order-validation-runs/${id}`, { signal }),
+  run: (parameters: ValidationParameters, key: string) => request<ValidationRun>('/order-validation-runs', { method: 'POST', headers: { 'Idempotency-Key': key }, body: JSON.stringify(parameters) }, 45000),
+  findings: (id: number, offset: number, check: string, severity: string, signal: AbortSignal) => {
+    const query = new URLSearchParams({ limit: '20', offset: String(offset) });
+    if (check) query.set('check', check);
+    if (severity) query.set('severity', severity);
+    return request<ValidationFinding[]>(`/order-validation-runs/${id}/findings?${query}`, { signal });
+  },
+};
