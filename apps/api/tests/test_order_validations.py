@@ -4,7 +4,7 @@ from unittest.mock import patch
 from sqlalchemy import text
 from test_orders import checkout as checkout_fixture
 
-from app.adapters.outbound.persistence.order_validation_checks import CHECKS
+from app.adapters.outbound.persistence.order_validation_checks import CHECKS, ValidationCheck
 
 checkout = checkout_fixture
 
@@ -92,7 +92,12 @@ def test_pending_age_and_partial_failure(checkout):
     ).json()
     assert saved["finding_count"] == 1, saved
     with patch.dict(
-        CHECKS, {"ORDER_TOTAL_MISMATCH": ("SELECT missing_column FROM orders", "ERROR")}
+        CHECKS,
+        {
+            "ORDER_TOTAL_MISMATCH": ValidationCheck(
+                text("SELECT missing_column FROM orders"), "ERROR"
+            )
+        },
     ):
         saved = run(
             client, "partial", checks=["ORDER_TOTAL_MISMATCH", "PAID_WITHOUT_REFERENCE"]
