@@ -1,10 +1,10 @@
 # How order creation works
 
-`POST /orders` accepts a customer, shipping address, items, and demo payment details. It saves the order, finds a warehouse that can fulfill every item, reserves stock, and attempts payment.
+`POST /orders` accepts customer, shipping, items, and demo payment data. It saves the order, selects a warehouse that can fulfill every item, reserves stock, and attempts payment.
 
-**No duplicate orders. No duplicate payments. Consistent inventory balances.** Physical stock, reservations, and availability must remain consistent under concurrent checkouts, retries, and failures. An unknown payment outcome must not release inventory. These requirements determine the transaction boundaries and retry behavior.
+**No duplicate orders. No duplicate payments. Consistent inventory balances.** These invariants hold across concurrent checkouts, retries, and failures. Unknown payment outcomes retain inventory.
 
-Checkout runs synchronously within the HTTP request. Each database stage commits independently; external calls run between transactions. The lifecycle and manual monitoring make interrupted work visible. Queues, webhook handling, and automatic recovery are intentionally outside this exercise's scope; a pending response does not start background work.
+Checkout runs synchronously within the HTTP request. Database stages commit independently; external calls run between transactions. Monitoring exposes interrupted work. Queues, webhooks, and automatic recovery are out of scope; a pending response does not start background work.
 
 ```text
 CREATED → BOOKED → PAYING → PAID
@@ -24,7 +24,7 @@ CREATED → BOOKED → PAYING → PAID
 
 ## Try one request
 
-Follow the [README setup](../README.md#run-locally) first. It starts the app and applies migrations, including five warehouses, ten USD products, and demo stock.
+Follow the [README setup](../README.md#run-locally) first. It starts the app and applies migrations with five warehouses, ten USD products, and demo stock.
 
 This example requires `curl` and available stock for product `1`, which exists in a fresh database:
 
@@ -56,7 +56,7 @@ curl -i -X POST http://localhost:8000/orders \
 JSON
 ```
 
-Expect `201`, `status: "PAID"`, a total of `"119.98"` with the original seeded price, a payment reference, and all four success stages in `history`. The mock payment waits about two seconds. It makes no real charge.
+Expect `201`, `status: "PAID"`, total `"119.98"`, a payment reference, and all four success stages in `history`. The mock payment waits about two seconds and makes no real charge.
 
 Repeat the command unchanged: it returns the same order ID without reserving or paying again. Change the quantity while keeping the key: expect `409`. Use a new key for a new order. For an existing database with depleted stock, use the UI's **Fill with test data** presets, which inspect current availability.
 
@@ -82,19 +82,19 @@ These guarantees concern the recorded inventory. The demo does not synchronize w
 
 [The HTTP adapter](../apps/api/app/adapters/inbound/http/orders.py) validates input before handing a command to the application service.
 
-- `Idempotency-Key` is mandatory: 1–128 visible ASCII characters, without spaces.
-- Customer, shipping address, at least one item, card number, and payment description are required. Unknown fields are rejected, including client-supplied prices, totals, coordinates, status, or warehouse selection.
-- Product IDs and quantities must be integers from `1` to `2147483647`. The request accepts at most 1,000 item entries.
-- Each quantity is validated **before** duplicate product entries are combined. Two entries for the same product become one item with their summed quantity; the combined quantity must also fit the limit.
-- Strings are trimmed where specified by the input models. Customer email is lowercased; country code is uppercased. Items are sorted by product ID.
+- `Idempotency-Key` is required: 1–128 visible ASCII characters, with no spaces.
+- Customer, shipping address, at least one item, card number, and payment description are required. Unknown fields—including prices, totals, coordinates, status, and warehouse—are rejected.
+- Product IDs and quantities are integers from `1` to `2147483647`; requests accept at most 1,000 item entries.
+- Quantities are validated before duplicate product entries are merged. The merged quantity must also fit the limit.
+- Models trim specified strings, lowercase email, uppercase country code, and sort items by product ID.
 
 Invalid input returns `422` before an order is created. Product existence and eligibility are checked inside the next transaction.
 
-**Decision:** the server owns price, fulfillment, and status. Accepting them from the browser would let a request bypass the rules that make checkout correct. FastAPI and Pydantic keep this validation and the [interactive API contract](http://localhost:8000/docs) together.
+**Decision:** the server owns price, fulfillment, and status. Accepting them from the browser would let a request bypass the rules that make checkout correct. FastAPI and Pydantic keep this validation and the [interactive API contract](http://localhost:8000/docs) together. For hosted use, open the [hosted Swagger UI](https://canals-commerce-production.up.railway.app/docs) or [hosted OpenAPI schema](https://canals-commerce-production.up.railway.app/openapi.json).
 
 ## 2. Claim the request and save the order
 
-The service generates a server-owned payment key, `payment:<UUID>`. The repository opens a transaction and attempts to insert the order with:
+The service generates a server-owned payment key, `payment:<UUID>`. The repository inserts the order in one transaction with:
 
 - The client order key and a SHA-256 fingerprint of the normalized command.
 - The separate payment key.
@@ -108,11 +108,11 @@ A unique database constraint arbitrates concurrent requests using the same order
 | Same normalized command | Read the saved order under a shared lock and return its current state. |
 | Different normalized command | Return `409 Conflict`. |
 
-The fingerprint includes customer, shipping, items, notes, and payment input. Retrying with the same body is the simplest way to preserve identity. A newly generated payment key on a replay is discarded; the saved order keeps its original payment identity.
+The fingerprint includes customer, shipping, items, notes, and payment input. A replay discards its newly generated payment key and keeps the saved order's key.
 
-**Decision:** deduplication belongs in PostgreSQL. An application-side “does this key exist?” check would race with another request. The unique constraint makes ownership of the request atomic.
+**Decision:** PostgreSQL owns deduplication. The unique constraint makes request ownership atomic; an application-side existence check would race.
 
-For a new order, the same transaction then:
+For a new order, that transaction then:
 
 1. Creates or reuses the customer identified by normalized email and links it to the order. If the email already exists, it reuses that customer's ID; **it does not overwrite the existing name or phone**.
 2. Takes shared product locks in product-ID order and checks that every product exists, is active, and is not deleted.
@@ -122,27 +122,27 @@ For a new order, the same transaction then:
 
 Unavailable products or an unsupported total return `422` and roll back this entire transaction. No partial order or consumed idempotency key remains.
 
-**Decision:** prices are facts about the purchase. They are captured once and protected against later changes. PostgreSQL `NUMERIC` stores two decimal places; USD is assumed throughout, with no currency field. Product names still come from the current catalog, so renaming a product changes its displayed name on older orders. Snapshotting names would be a separate improvement.
+**Decision:** prices are purchase facts. They are captured once with Python `Decimal` and PostgreSQL `NUMERIC` at two-decimal precision. USD is assumed. Product names remain live catalog data, so renaming a product changes older displays.
 
 The assessment stores test card numbers in the database and temporarily in browser session storage for pending retries. API responses omit them. Real payment integration requires provider tokenization.
 
 ## 3. Create or attach the customer
 
-Customer creation or reuse and the order link happen inside the atomic order-creation transaction. The customer is identified by normalized email; if no customer exists, it is inserted. If the email already exists, its ID is reused; **the existing name and phone are not overwritten**.
+Customer creation, reuse, and linking occur in the order-creation transaction. Normalized email identifies the customer; an existing customer's name and phone are not overwritten.
 
-**Decision:** customer identity is shared across purchases. Delivery details belong to the individual order and remain a shipping snapshot. There is no separate saved-address CRUD model.
+Customer identity is shared across purchases; delivery details remain order snapshots. There is no saved-address CRUD model.
 
 ## 4. Locate the shipping address
 
-The service calls the geocoder outside any database transaction, with a ten-second timeout. On success, a short transaction locks the order and saves its latitude and longitude. The order remains `CREATED`.
+The service calls the geocoder outside a database transaction with a ten-second timeout. On success, a short transaction locks the order and saves its coordinates. The order remains `CREATED`.
 
-The current mock ignores the address and returns a sample Mar del Plata location. Repeated new orders for the same address can receive different sample coordinates. Replays keep the coordinates already saved on the order.
+The mock ignores the address and returns a sample Mar del Plata location. New orders for the same address can receive different sample coordinates; replays retain saved coordinates.
 
 A geocoding timeout or unavailable response cancels the order with `GEOCODING_FAILED`. No inventory has been reserved and no payment is attempted.
 
-**Decision:** a slow external service must not hold database locks. The geocoder is an async interface with a mock adapter, so a real provider can be added without moving HTTP concerns into checkout rules.
+**Decision:** external calls do not hold database locks. The async geocoder interface isolates the mock and future providers from checkout rules.
 
-There is no separate `GEOCODING` status: the lookup neither charges the customer nor reserves stock. `CREATED` and the saved coordinates describe the durable progress needed here. A dedicated status could provide finer operational visibility, but is not needed for the checkout guarantees.
+There is no `GEOCODING` status: the lookup neither charges nor reserves stock. `CREATED` plus saved coordinates is sufficient durable progress.
 
 ## 5. Rank warehouses and save the evidence
 
@@ -154,22 +154,22 @@ available = on_hand - reserved
 
 Stock has one row per warehouse/product pair. A missing row cannot satisfy an item. Stock distributed across several warehouses cannot satisfy a single order: split fulfillment is outside the scope.
 
-The service ranks eligible candidates by Haversine distance from the saved shipping coordinates, then by warehouse ID to break ties. Haversine gives great-circle distance in kilometers. It does not estimate driving distance, delivery time, or shipping cost.
+The service ranks candidates by Haversine distance from the saved coordinates, then warehouse ID. Haversine gives great-circle distance, not driving distance, delivery time, or shipping cost.
 
-**Decision:** this gives a deterministic ranking for the evaluated coordinates without a routing API. One warehouse per order keeps reservation and fulfillment rules small and explicit.
+**Decision:** this provides deterministic ranking without a routing API. One warehouse per order keeps fulfillment rules explicit.
 
 Before trying to reserve, another transaction saves `warehouse_decision`, a versioned JSONB snapshot containing the evaluation timestamp, strategy, shipping coordinates, and ranked candidates. Each candidate records its ID, name, coordinates, unrounded distance, rank, reservation outcome, and rejection reason.
 
 **A candidate is not a reservation.** Another checkout can consume its stock after evaluation. The next step must recheck availability under locks.
 
-The evidence has precise limits:
+Evidence limits:
 
 - Only warehouses eligible at evaluation time appear as candidates. The snapshot does not explain every excluded warehouse.
 - Candidates begin as `NOT_ATTEMPTED`. Reservation attempts change them to `REJECTED` or `SELECTED`; candidates after the winner stay `NOT_ATTEMPTED`.
 - An empty candidate list means none qualified. A null snapshot means no decision was recorded, such as a historical order, geocoding failure, or interruption before selection.
 - Replays and later warehouse changes do not recompute the evidence. Payment failure does not erase it.
 
-The order detail table and Leaflet map display this evidence. The map also shows current warehouse locations, labeled separately from saved candidate coordinates. Current data cannot reconstruct historical eligibility. OpenStreetMap tiles need internet access; markers and the table remain available if tiles fail.
+The order detail table and Leaflet map display this evidence. Current warehouse data cannot reconstruct historical eligibility. OpenStreetMap tiles need internet access; markers and the table remain available if tiles fail.
 
 ## 6. Reserve all items at one warehouse
 
@@ -185,7 +185,7 @@ Each candidate gets its **own transaction**. The repository:
 
 Physical `on_hand` stock does not change. Reservation reduces availability by increasing `reserved`.
 
-**Decision:** checking all items before updating any of them prevents partial booking. Committing the reservation and `BOOKED` together prevents an order from claiming stock it does not hold. Consistent stock-lock ordering avoids competing checkouts acquiring the same rows in opposite orders. Shared catalog locks let checkouts coexist while protecting the data they depend on.
+**Decision:** validate all items before updating stock, and commit the reservation with `BOOKED`. Product-ID lock ordering prevents deadlocks; catalog locks protect eligibility and price capture.
 
 If a candidate fails, its rejection evidence commits without changing stock:
 
@@ -195,22 +195,22 @@ If a candidate fails, its rejection evidence commits without changing stock:
 | `PRODUCT_UNAVAILABLE` | At least one product is missing, inactive, or deleted. |
 | `INSUFFICIENT_STOCK` | A stock row is missing or available quantity is too low. |
 
-That transaction ends before the next candidate is tried, releasing its locks. The service uses the original ranked candidate list; it does not discover newly eligible warehouses during retries. If no candidate succeeds, it cancels with `OUT_OF_STOCK`.
+The transaction ends before the next candidate, releasing its locks. The service uses the original ranked list and does not discover new candidates. If none succeeds, it cancels with `OUT_OF_STOCK`.
 
 ## 7. Record payment initiation, then call the provider
 
-A short transaction locks the order, requires `BOOKED`, and commits `PAYING`. Only then does the service call the payment gateway, outside the transaction, with:
+A short transaction locks the order, requires `BOOKED`, and commits `PAYING`. The service then calls the gateway outside the transaction with:
 
 - The saved order total.
 - The request's payment details.
 - The server-generated payment identity saved at creation.
 - A ten-second timeout.
 
-**`PAYING` proves local intent, not provider receipt.** The process can crash after committing that state but before sending the request. It can also lose the response after the provider has charged successfully. The same local state can represent either situation.
+**`PAYING` proves local intent, not provider receipt.** The process can crash before sending the request or lose a successful provider response.
 
 The mock waits two seconds, succeeds, and derives a stable payment reference from the payment key. No money moves. A real gateway must honor the idempotency key; database uniqueness cannot by itself prevent duplicate charges inside an external system.
 
-**Decision:** order identity and payment identity serve different purposes. The client identifies a checkout request. The server identifies the corresponding charge. Reusing an order key returns early, before geocoding, reservation, or payment can run again.
+**Decision:** the client identifies the checkout request; the server identifies its charge. Reusing an order key returns before geocoding, reservation, or payment.
 
 ## 8. Finalize what is known
 
@@ -221,23 +221,23 @@ The mock waits two seconds, succeeds, and derives a stable payment reference fro
 | Timeout or provider unavailable | Return the saved `PAYING` order. | Keep reserved. |
 | Invalid response, including success without a valid reference | Return the saved `PAYING` order and log `PAYMENT_RESPONSE_INVALID`. | Keep reserved. |
 
-**A timeout is not a decline.** Releasing stock after an unknown outcome could sell inventory already paid for by this customer. The cost of preserving it is reduced availability until reconciliation.
+**A timeout is not a decline.** Releasing stock after an unknown outcome could resell paid inventory. The trade-off is reduced availability until reconciliation.
 
-A successful gateway response must include a string reference that is nonblank and no longer than 128 characters. Missing, blank, or oversized references are incomplete evidence of success, not a definitive decline. They produce `202` with `PAYING`; a same-key replay returns that state without charging again.
+A successful gateway response must include a nonblank string reference of at most 128 characters. Otherwise the result is incomplete evidence, not a decline: return `202` with `PAYING`. A same-key replay returns that state without charging again.
 
-Cancellation checks the current state before releasing anything. It locks stock in product-ID order and verifies that the reservation can be released in full. An inconsistent reservation raises an error and rolls back cancellation; it does not silently subtract a partial amount. Already paid or cancelled orders are not cancelled again by this method. Payment finalization only changes orders still in `PAYING`.
+Cancellation checks state, locks stock in product-ID order, and verifies a full release. An inconsistent reservation raises an error and rolls back; it never partially subtracts. Already `PAID` or `CANCELLED` orders are unchanged. Finalization only changes `PAYING` orders.
 
-**Paid does not mean shipped.** The app has no shipment stage, so `BOOKED`, `PAYING`, and `PAID` all retain reservations. Physical stock remains unchanged throughout checkout.
+**Paid does not mean shipped.** The app has no shipment stage. `BOOKED`, `PAYING`, and `PAID` retain reservations; physical stock is unchanged.
 
 ## History, responses, and interrupted work
 
-Database triggers append status history in the same transaction as each status change. Entries include status, timestamp, and cancellation reason when applicable. `clock_timestamp()` records wall-clock time; history sorts by timestamp and ID. History cannot be updated or deleted, and orders cannot be deleted. Separate database audit triggers record warehouse, product, and stock changes, including reservation and release.
+Database triggers append status history in the same transaction as each status change. Entries include status, timestamp, and applicable cancellation reason. `clock_timestamp()` records wall-clock time; history sorts by timestamp and ID. History cannot be updated or deleted; orders cannot be deleted. Separate audit triggers record warehouse, product, and stock changes, including reservation and release.
 
-**Decision:** evidence must commit with the change it describes. Application logs help trace requests; durable history explains the order even after logs expire. State checks govern the application's transitions; the history trigger records changes, while monitoring can detect invalid sequences introduced outside that flow.
+**Decision:** evidence commits with the change it describes. Logs trace requests; durable history remains after logs expire. State checks govern application transitions, while monitoring detects invalid sequences introduced outside that flow.
 
 `GET /orders/{id}` uses a shared order lock while loading its related data.
 
-The order-list read avoids holding locks across per-order hydration: it selects the page, items, history, and customers in batches inside a PostgreSQL `REPEATABLE READ` transaction, so every returned order is assembled from one deliberate snapshot.
+The order list avoids per-order locks: it loads the page, items, history, and customers in batches inside a PostgreSQL `REPEATABLE READ` transaction. Every result is assembled from one snapshot.
 
 | `POST /orders` response | Meaning |
 | --- | --- |
@@ -247,21 +247,21 @@ The order-list read avoids holding locks across per-order hydration: it selects 
 | `422` | Request validation, product eligibility, or supported-total validation failed; this request created no order. |
 | Unexpected error / lost response | Earlier stages may already have committed. Retry with the same key and body to learn the saved state. |
 
-Successful order responses include `Location: /orders/{id}`, items, chronological history, warehouse evidence, and the payment reference when recorded. `GET /orders?limit=50&offset=0` lists newest orders first. Lists return arrays, with `limit` from 1–100 and nonnegative `offset`. Editing, manual status changes, and deletion endpoints are not exposed.
+Successful responses include `Location: /orders/{id}`, items, chronological history, warehouse evidence, and any payment reference. `GET /orders?limit=50&offset=0` lists newest orders first; `limit` is 1–100 and `offset` is nonnegative. Editing, manual status changes, and deletion endpoints are not exposed.
 
 ### What survives a crash
 
 | Interruption point | Durable state | What a replay does |
 | --- | --- | --- |
 | Before creation commits | No order from that attempt. | Can create and process the order. |
-| After creation, before booking | `CREATED`; coordinates or decision evidence may be incomplete, but the customer link is already committed with the order. | Returns it without resuming. |
+| After creation, before booking | `CREATED`; coordinates or decision evidence may be incomplete. | Returns it without resuming. |
 | After reservation, before payment initiation | `BOOKED`, with stock reserved. | Returns it without starting payment. |
 | After `PAYING`, before finalization | `PAYING`, with stock reserved; provider outcome uncertain. | Returns it without another charge. |
 | After finalization, before HTTP response | `PAID` or `CANCELLED`. | Returns the saved result. |
 
-A database error rolls back the current transaction, not earlier commits. A provider can confirm payment while the local order still says `PAYING` if finalization fails.
+A database error rolls back the current transaction, not earlier commits. Finalization can fail after the provider confirms payment, leaving the local order `PAYING`.
 
-**Recovery is intentionally outside this exercise's scope.** The implementation preserves committed progress and detects stalled orders when monitoring is run. It does not query the payment provider, reconcile charges, or resume interrupted work. The gateway currently exposes only charging; the saved `payment:<UUID>` is the identity a future provider lookup would use. A recovery implementation would inspect the saved stage, establish any possible charge's outcome, and make guarded state changes. Simply posting the order again does not perform that work. Never replace an uncertain attempt with a new key just to make it proceed.
+**Recovery is out of scope.** The implementation preserves committed progress and monitoring detects stalled orders. It does not query the provider, reconcile charges, or resume interrupted work. The saved `payment:<UUID>` is the identity a future provider lookup would use. Reposting the order returns its saved state; it does not recover it. Do not replace an uncertain attempt with a new key.
 
 ## Verify failures and concurrency
 
@@ -275,11 +275,11 @@ The [README walkthrough](../README.md#verify-the-behavior) covers the interface.
 | `payment-timeout` | `202`, `PAYING` | Retained |
 | `payment-failed` | `202`, `PAYING`; provider unavailable | Retained |
 
-Payment scenarios require a successful reservation first. To verify out-of-stock behavior, choose **No stock** in the UI; it requests more units than any warehouse can supply and should return `CANCELLED` with `OUT_OF_STOCK`.
+Payment scenarios require a successful reservation first. For out-of-stock behavior, choose **No stock** in the UI; it requests more units than any warehouse can supply and returns `CANCELLED` with `OUT_OF_STOCK`.
 
-Keywords are case-insensitive, must be complete keywords, and the first match in the notes wins. Simulated timeouts raise immediately rather than waiting ten seconds. Per-invocation adapter wrappers implement these scenarios; checkout rules and SQL contain no simulation branches. Simulations are always enabled for this assessment.
+Keywords are case-insensitive, must be complete, and the first match wins. Simulated timeouts raise immediately. Per-invocation adapter wrappers implement these scenarios; checkout rules and SQL contain no simulation branches. Simulations are always enabled.
 
-Demo stock is finite. Migration `0010` seeds overlapping assortments with 5–50 units per stocked pair: two products appear in all five warehouses, and the remaining products appear in three. Migrations preserve existing balances. Paid and pending orders consume availability, so rerunning migrations does not reset the demo.
+Demo stock is finite. Migration `0010` seeds 5–50 units per stocked pair; two products appear in all five warehouses and the rest in three. Migrations preserve balances, so paid and pending orders reduce availability until the demo is reset.
 
 After setup, from the repository root:
 
@@ -298,11 +298,11 @@ The existing PostgreSQL tests verify behavior that is difficult to prove by clic
 | Failed cancellation rolls back stock and history together | `test_failed_finalization_rolls_back_stock_and_history` |
 | Warehouse evidence survives later changes | `test_decision_records_fallback_and_survives_warehouse_changes` |
 
-Tests create and remove temporary schemas against the migrated database. `make check` also runs lint, formatting, TypeScript checks, and the web build. See [automated checks](../README.md#automated-checks) for the full setup and coverage boundaries.
+Tests create and remove temporary schemas against the migrated database. The repository also includes lint, formatting, TypeScript, and web-build checks for code changes.
 
 ## Monitor what checkout leaves behind
 
-Monitoring detects stalled work and inconsistent data. It saves reports; it never charges, cancels, releases stock, or repairs orders. Runs must be requested manually. Scheduling and automatic notification delivery are outside scope, so an interrupted request does not by itself trigger a monitoring run or an outbound alert.
+Monitoring detects stalled work and inconsistent data. It saves findings but never charges, cancels, releases stock, or repairs orders. Runs are manual; there is no scheduler or notification delivery.
 
 Open **Monitoring → Run checks**, or run:
 
@@ -326,7 +326,7 @@ An empty object runs all eight checks. To select checks and thresholds, use:
 }
 ```
 
-Thresholds default to 300 seconds and accept 1–604800. Checks scan all orders; inventory comparison uses complete warehouse/product totals.
+Thresholds default to 300 seconds and accept 1–604800 seconds. Checks scan all orders; inventory comparison uses complete warehouse/product totals.
 
 | Check | Finding |
 | --- | --- |
@@ -341,7 +341,7 @@ Thresholds default to 300 seconds and accept 1–604800. Checks scan all orders;
 
 Historical `BOOKED → PAID` transitions remain valid. Older `BOOKED` orders may already have attempted payment; introducing `PAYING` did not reclassify them.
 
-**Completed means execution finished, not that orders are healthy.** Inspect `finding_count`, error/warning totals, and each check's result. Findings preserve identifiers and diagnostic values, excluding customer/address snapshots and card numbers. They do not verify provider transactions, duplicate charges, charged amounts, or currency.
+**Completed means execution finished, not that orders are healthy.** Inspect `finding_count`, severity totals, and each result. Findings preserve identifiers and diagnostics but exclude customer/address snapshots and card numbers. They do not verify provider transactions, duplicate charges, amounts, or currency.
 
 A new run returns `201` and `Location`; the same key and parameters return `200` with the existing run. A key with different parameters or a competing execution holding the database lock returns `409`. Invalid parameters return `422`.
 
@@ -351,11 +351,11 @@ A new run returns `201` and `Location`; the same key and parameters return `200`
 | `GET /order-validation-runs/{id}` | Parameters, timestamps, rules version, and check results. |
 | `GET /order-validation-runs/{id}/findings` | Paginated evidence; optional `check`, `severity` (`ERROR`/`WARNING`), and `order_id` filters. |
 
-Each check reads one database statement snapshot and commits its findings independently. Checks in one run may observe different moments during concurrent checkout. Age checks use a common cutoff time captured at run start. Check statements have a five-second timeout; a 30-second execution budget stops further checks from starting and marks them skipped. Failed or skipped checks make the run `PARTIAL`, or `FAILED` if none completed. This budget is not a strict HTTP response deadline.
+Each check reads one statement snapshot and commits findings independently, so checks in one run may observe different moments during concurrent checkout. Age checks share a cutoff captured at run start. Statements have a five-second timeout; a 30-second execution budget skips remaining checks. Failed or skipped checks produce `PARTIAL`, or `FAILED` if none complete. The budget is not an HTTP deadline.
 
 An abrupt crash can leave a `RUNNING` record. The next new invocation marks abandoned runs `INTERRUPTED` after acquiring the execution lock. There is no scheduler.
 
-In the UI, **Run again** restores the previous selection and thresholds for review. **Check run status** reuses a pending request identity after a lost response, retained across reloads within the browser tab. Results link to affected orders and warehouses; running result pages refresh automatically, and historical results offer manual refresh.
+In the UI, **Run again** restores the previous selection and thresholds. **Check run status** reuses a pending request identity after a lost response within the browser tab. Results link to affected orders and warehouses; active pages refresh automatically and historical results refresh manually.
 
 ## Follow the implementation
 
@@ -368,4 +368,4 @@ In the UI, **Run again** restores the previous selection and thresholds for revi
 | Database invariants and history | [Migrations](../apps/api/migrations/versions/) |
 | Monitoring checks and execution | [Check queries](../apps/api/app/adapters/outbound/persistence/order_validation_checks.py), [validation repository](../apps/api/app/adapters/outbound/persistence/order_validations.py) |
 
-The API writes structured JSON logs. Match the response's `X-Request-ID` to request events, then follow checkout events by order ID with `make api-logs`. Logs help locate the failure; the order, history, reservation balances, and saved decision evidence establish what committed.
+The API writes structured JSON logs. Match `X-Request-ID` to request events, then follow checkout events by order ID with `make api-logs`. Logs locate failures; the order, history, reservation balances, and decision evidence establish what committed.

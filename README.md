@@ -1,14 +1,37 @@
 # Canals Commerce
 
-An order checkout app: choose products, reserve stock at the nearest eligible warehouse, and process a mock payment. The interface exposes order history, warehouse selection, inventory, and checks for stalled or inconsistent orders.
+An order checkout app that selects products, reserves stock at the nearest eligible warehouse, and processes a mock payment. The UI exposes order history, warehouse selection, inventory, and consistency checks.
 
-**Three requirements drive the design: no duplicate orders, no duplicate payments, and consistent inventory balances.** Retries reuse the original request identity. Physical stock, reservations, and availability must remain consistent under concurrent checkouts, retries, and failures. An uncertain payment keeps its inventory reservation because a timeout does not prove that a charge failed.
+## Non-functional requirements
 
-**Hosted demo:** [canals-commerce.example.com](https://canals-commerce.example.com) — placeholder; not deployed yet.
+1. **No duplicate order processing.** Repeated requests must resolve to one order.
+2. **No duplicate payments.** A checkout must not create multiple charge attempts.
+3. **Consistent inventory.** For each warehouse/product pair, `0 <= reserved <= on_hand` and `available = on_hand - reserved`.
+
+## How the design addresses them
+
+1. **Order idempotency:** `Idempotency-Key` identifies the checkout request. A unique database constraint makes concurrent requests with the same key share one order; a different request with that key returns `409 Conflict`.
+2. **Payment idempotency:** the server generates and persists a separate `payment:<UUID>` identity. A payment provider can use it to deduplicate charge attempts; clients cannot choose or reuse another order's payment identity.
+3. **Inventory consistency:** the API locks and rechecks all required stock rows before reserving them. Reservation and `BOOKED` commit together; release and `CANCELLED` commit together. Unknown payment outcomes retain reservations.
+
+See the [checkout reference](docs/orders.md) for the detailed API contract, transaction flow, failure handling, monitoring checks, and concurrency behavior.
+
+## Out of scope
+
+1. **Authentication and authorization.** No users, roles, access control, or tenant isolation.
+2. **Payment security and production payments.** Payments are mocked. Production use requires tokenization, PCI controls, provider webhooks, and secret management.
+3. **Automatic retries and recovery.** Replaying a request returns its saved state; it does not resume checkout. Recovery workers, provider lookup, reconciliation, and webhook handling are excluded.
+4. **Scheduled monitoring and alerts.** Checks run manually and save findings. There is no scheduler, notification delivery, or automatic repair.
+5. **Production scale and availability.** Checkout is synchronous. Queues, horizontal-work coordination, rate limiting, and high-availability operations are outside the exercise.
+6. **Catalog administration.** Products and warehouses are read-only through the API; CRUD and catalog workflows are excluded.
+
+**Hosted demo:** [Open the deployed web app](https://web-production-053dd.up.railway.app/)
+
+The web app and API are deployed as separate services. The hosted API is [canals-commerce-production.up.railway.app](https://canals-commerce-production.up.railway.app/). Open its [hosted Swagger UI](https://canals-commerce-production.up.railway.app/docs) or download the [hosted OpenAPI schema](https://canals-commerce-production.up.railway.app/openapi.json) without running the project locally. The local equivalents are listed below.
 
 ## Run locally
 
-Requires **Docker with Compose v2**, a running Docker daemon, and **Make**. Ports **5173** and **8000** must be free. Docker installs Python, Node, PostgreSQL, and project dependencies. No local language setup or API keys are needed; the first build requires internet access.
+Requires **Docker with Compose v2**, a running Docker daemon, and **Make**. Ports **5173** and **8000** must be free. Docker provides Python, Node, PostgreSQL, and project dependencies; no local language setup or API keys are required. The first build needs internet access.
 
 From a fresh checkout, in the repository root:
 
@@ -16,10 +39,9 @@ From a fresh checkout, in the repository root:
 cp .env.example .env
 make up
 make migrate
-make check
 ```
 
-`make up` builds and starts the services. `make migrate` creates the schema and seeds **5 warehouses, 10 USD products, and stock across warehouses**. Run both before opening the app or testing database behavior. `make check` runs the checks described below.
+`make up` builds and starts the services. `make migrate` creates the schema and seeds **5 warehouses, 10 USD products, and stock**. Run both before opening the app.
 
 | Open | Purpose |
 | --- | --- |
@@ -27,9 +49,13 @@ make check
 | [Interactive API docs](http://localhost:8000/docs) | Inspect requests and call endpoints |
 | [Health endpoint](http://localhost:8000/health) | Confirm the API responds; does not verify migrations |
 
-The header includes **Reset demo data** for examiners. Type `RESET` to delete orders, monitoring runs, inventory changes, and audit history, then restore the same catalog and stock created by the migrations. This endpoint is intended for the disposable assessment database only.
+FastAPI generates the API documentation from the endpoint definitions. Access the [local Swagger UI](http://localhost:8000/docs) or [local OpenAPI schema](http://localhost:8000/openapi.json) after the API starts; the web app is not required. The frontend and API use separate base URLs.
 
-Use fictional customer details and test card `4242424242424242`. Payments are simulated; no money moves. Geocoding returns a sample Mar del Plata location, not the real coordinates of the entered address.
+The header's **Reset demo data** action accepts `RESET`, deletes mutable demo state, and restores the migration seed. Use it only with the disposable assessment database.
+
+`POST /demo/reset` is an assessment convenience, not a production administration API. Run it when no checkout or monitoring request is in flight. Reset and reseeding share one transaction: a failure rolls it back and returns a generic `500`, with diagnostics in request logs.
+
+Geocoding returns a sample Mar del Plata location, not the real coordinates of the entered address.
 
 ## Verify the behavior
 
@@ -70,23 +96,11 @@ After creating a **Payment timeout** order:
 
 In [Swagger UI](http://localhost:8000/docs), open `POST /orders`, click **Try it out**, use the [complete example request](docs/orders.md), and set `Idempotency-Key` to `readme-order-1`.
 
-- Submit twice with the same key and body: expect the **same order ID**, with no second reservation or payment attempt.
-- Change the quantity while keeping the key: expect **409 Conflict**.
-- Use a fresh key with quantity `0`: expect **422**, with no order created.
+1. Submit twice with the same key and body: expect the **same order ID**, with no second reservation or payment attempt.
+2. Change the quantity while keeping the key: expect **409 Conflict**.
+3. Use a fresh key with quantity `0`: expect **422**, with no order created.
 
 Use a new key for each new order. A `201` response means the order was saved; inspect `status` because cancelled checkouts also return `201`. Pending orders return `202`. Replaying a pending order observes its saved state; it does not resume checkout.
-
-## Automated checks
-
-After setup, run `make check` for Ruff lint and formatting checks, the backend pytest suite, TypeScript checks, and a Vite build. Every step must pass. For backend tests alone:
-
-```sh
-make test
-```
-
-Database tests use **real PostgreSQL**, with temporary schemas created and removed per test. They require the migrated database and leave demo orders and stock intact. Running pytest without `DATABASE_URL` skips database tests; use the Make commands to exercise them.
-
-The suite covers concurrent requests sharing an idempotency key, competing inventory reservations, warehouse fallback, payment failures, rollback, price snapshots, status history, monitoring findings, and log redaction. External payment and geocoding services are mocked. There is no committed browser test suite; use the walkthrough above to verify the interface.
 
 ## Design decisions
 
@@ -138,28 +152,3 @@ Order rows are locked for state changes. Stock rows are exclusively locked in pr
 - **Application services with adapter interfaces:** checkout rules depend on repository, payment, and geocoder contracts. SQL, HTTP, and failure simulation stay in adapters; real providers have a defined integration point.
 - **React + TypeScript + Vite:** three screens need little infrastructure. Component state, a fetch client, and hash navigation avoid a global state store or routing framework.
 - **Leaflet + OpenStreetMap:** a map without a paid API key. Tiles need internet access; markers and the decision table remain available if tiles fail.
-
-## Scope and limits
-
-- **Assessment demo:** no authentication or real payment integration. Test card numbers are stored in the database and temporarily in browser session storage for pending checkout retries. Real payments require provider tokenization.
-- **One warehouse per order.** No split shipments, taxes, shipping rates, fulfillment, refunds, or replenishment UI. Products and warehouses are read-only through the API.
-- **Interrupted work is detected, not automatically recovered.** Monitoring runs are manual, with saved findings and execution history. There is no scheduler or automatic notification delivery, and a completed run can still contain errors. Provider lookup, reconciliation, recovery workers, and webhook handling are intentionally outside this exercise's scope. The saved payment identity supports a future provider lookup; no such lookup runs today. Replaying a request returns its saved state without restarting processing.
-- **Finite demo stock.** Successful and pending orders retain reservations. Re-running migrations does not replenish stock; enough repeated checkouts will exhaust it.
-
-## Development
-
-| Command | Purpose |
-| --- | --- |
-| `make up` | Build and start services; rebuild after dependency changes |
-| `make migrate` | Apply pending migrations |
-| `make check` | Run backend checks, tests, and web typecheck/build |
-| `make test` | Run backend tests only |
-| `make logs` | Follow all service logs |
-| `make api-logs` | Follow API JSON logs |
-| `make down` | Stop services and retain database data |
-
-API and web source changes reload automatically. After changing `.env`, run `make up` to recreate affected services. Defaults are in [.env.example](.env.example).
-
-If startup fails, run `docker compose ps -a` and `make logs`. If API calls report missing tables, run `make migrate`. For request failures, match the response's `X-Request-ID` to structured API logs. Application events omit customer details, addresses, card data, and idempotency keys; conventions live in [logging.py](apps/api/app/infrastructure/logging.py).
-
-Start reading at [the checkout service](apps/api/app/application/services/orders.py), then [the SQL repository](apps/api/app/adapters/outbound/persistence/orders.py) and [checkout tests](apps/api/tests/test_orders.py). The [checkout reference](docs/orders.md) documents request bodies, failure keywords, monitoring checks, and warehouse decision evidence.
