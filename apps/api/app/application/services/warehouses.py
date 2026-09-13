@@ -1,5 +1,7 @@
+from __future__ import annotations
+
 from app.application.ports.warehouses import WarehouseRepository
-from app.domain.warehouses import WarehouseView
+from app.domain.warehouses import StockFilter, WarehouseProductView, WarehouseView
 
 
 class WarehouseService:
@@ -11,3 +13,8 @@ class WarehouseService:
 
     async def get(self, warehouse_id: int) -> WarehouseView:
         return await self.repository.get(warehouse_id)
+
+    async def products(
+        self, warehouse_id: int, stock: StockFilter, limit: int, offset: int
+    ) -> list[WarehouseProductView]:
+        return await self.repository.products(warehouse_id, stock, limit, offset)

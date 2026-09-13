@@ -56,7 +56,25 @@ async function request<T>(path: string, options: RequestInit = {}, timeout = 100
   return response.status === 204 ? undefined as T : response.json();
 }
 
+export type StockFilter = 'all' | 'available' | 'on_hand';
+export type WarehouseProduct = { product_id: number; name: string; sku: string; on_hand: number; booked: number; available: number };
+async function allPages<T>(path: string, signal: AbortSignal): Promise<T[]> {
+  const rows: T[] = [];
+  for (let offset = 0; ; offset += 100) {
+    const page = await request<T[]>(`${path}?limit=100&offset=${offset}`, { signal });
+    rows.push(...page);
+    if (page.length < 100) return rows;
+  }
+}
+
+export const inventoryApi = {
+  products: (signal: AbortSignal) => allPages<Product>('/products', signal),
+  warehouses: (signal: AbortSignal) => allPages<Warehouse>('/warehouses', signal),
+};
+
 export const warehouseApi = {
+  list: (offset: number, signal: AbortSignal) => request<Warehouse[]>(`/warehouses?limit=20&offset=${offset}`, { signal }),
+  products: (id: number, stock: StockFilter, offset: number, signal: AbortSignal) => request<WarehouseProduct[]>(`/warehouses/${id}/products?stock=${stock}&limit=20&offset=${offset}`, { signal }),
   get: (id: number, signal?: AbortSignal) => request<Warehouse>(`/warehouses/${id}`, { signal }),
 };
 

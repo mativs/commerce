@@ -12,7 +12,7 @@ make up
 make migrate
 ```
 
-The migrations also add 5 warehouses and 100 products priced in USD, with varied stock across warehouses.
+The migrations also add 5 warehouses and 10 products priced in USD, with varied stock across warehouses.
 
 ## Usage
 

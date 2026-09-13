@@ -67,8 +67,8 @@ Unexpected database errors roll back the current transaction, not earlier commit
 steps. Never blindly cancel a potentially charged order.
 
 Migration `0010` adds demo stock automatically with `make migrate`. With the original
-five warehouses and 100 active USD products, each warehouse receives 64 different
-products with 5–50 units each and no reservations. Ten products are shared by every
+five warehouses and 10 active USD products, warehouses receive overlapping
+assortments with 5–50 units each and no reservations. Two products are shared by every
 warehouse; the rest appear in three warehouses, allowing warehouse selection and
 unavailable-order scenarios. Existing stock balances are preserved.
 

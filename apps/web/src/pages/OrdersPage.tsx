@@ -1,6 +1,6 @@
 import { Pagination } from '../components/Pagination';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { ApiError, orderApi, productApi, warehouseApi, type Order, type OrderInput, type Product, type ShippingAddressInput, type Warehouse } from '../api/client';
+import { ApiError, inventoryApi, orderApi, productApi, warehouseApi, type Order, type OrderInput, type Product, type ShippingAddressInput, type Warehouse } from '../api/client';
 
 const money = (value: string | number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(Number(value));
 const date = (value: string) => new Date(value).toLocaleString();
@@ -91,6 +91,9 @@ function OrderForm() {
   const [busy, setBusy] = useState(false);
   const [reload, setReload] = useState(0);
   const submitting = useRef(false);
+  const [filling, setFilling] = useState(false);
+  const presetRequest = useRef<AbortController | null>(null);
+  useEffect(() => () => presetRequest.current?.abort(), []);
   useEffect(() => {
     const controller = new AbortController(); setLoading(true); setCatalogError('');
     const timer = window.setTimeout(() => {
@@ -118,9 +121,57 @@ function OrderForm() {
   const byId = new Map(products.map((p) => [p.id, p]));
   const validItems = items.length > 0 && items.every((i) => /^\d+$/.test(i.quantity) && Number(i.quantity) > 0 && Number(i.quantity) <= 2147483647 && byId.has(i.product_id));
   const total = items.reduce((sum, i) => sum + Number(byId.get(i.product_id)?.price || 0) * (Number(i.quantity) || 0), 0);
-  const locked = busy || !!attempt;
+  const locked = busy || filling || !!attempt;
+  async function fillTestOrder(scenario: string) {
+    if (locked || presetRequest.current || !scenario) return;
+    const controller = new AbortController();
+    presetRequest.current = controller;
+    setFilling(true); setError('');
+    try {
+      const catalog = (await inventoryApi.products(controller.signal)).filter((product) => product.is_active && !product.deleted_at);
+      if (controller.signal.aborted) return;
+      const maxAvailable = (product: Product) => Math.max(0, ...product.stock.map((stock) => stock.available));
+      const warehouseIds = [...new Set(catalog.flatMap((product) => product.stock.map((stock) => stock.warehouse_id)))];
+      const assortments = warehouseIds.map((id) => ({
+        id,
+        products: catalog.filter((product) => product.stock.some((stock) => stock.warehouse_id === id && stock.available > 0)),
+      })).sort((a, b) => b.products.length - a.products.length || a.id - b.id);
+      const warehouse = assortments[0];
+      let selected: { product_id: number; quantity: string }[];
+      if (scenario === 'no-stock') {
+        const unavailable = catalog.filter((product) => maxAvailable(product) < 2147483647)
+          .sort((a, b) => maxAvailable(a) - maxAvailable(b))[0];
+        if (!unavailable) throw new Error('No suitable product is available for this test.');
+        const others = catalog.filter((product) => product.id !== unavailable.id)
+          .sort((a, b) => maxAvailable(b) - maxAvailable(a)).slice(0, 3);
+        selected = [
+          { product_id: unavailable.id, quantity: String(maxAvailable(unavailable) + 1) },
+          ...others.map((product, index) => ({ product_id: product.id, quantity: String(Math.max(1, Math.min(index + 1, maxAvailable(product)))) })),
+        ];
+      } else {
+        if (!warehouse?.products.length) throw new Error('No products have available stock. Replenish stock or choose No stock.');
+        // All items must fit in the same warehouse, not just have stock somewhere.
+        selected = warehouse.products.slice(0, 4).map((product, index) => ({
+          product_id: product.id,
+          quantity: String(Math.min(index % 3 + 1, product.stock.find((stock) => stock.warehouse_id === warehouse.id)!.available)),
+        }));
+      }
+      setProducts((previous) => [...new Map([...previous, ...catalog].map((p) => [p.id, p])).values()]);
+      setItems(selected);
+      setCustomer({ first_name: 'Ana', last_name: 'Perez', phone: '+54 223 555 0100', email: 'ana.demo@example.com' });
+      setAddress({ recipient_name: 'Ana Perez', phone: '+54 223 555 0100', address_line1: 'San Martín 2500', address_line2: 'Apartment 2B', city: 'Mar del Plata', state: 'Buenos Aires', postal_code: 'B7600', country_code: 'AR', delivery_instructions: 'Ring the bell on arrival.' });
+      setCardNumber('4242424242424242');
+      setPaymentDescription('Demo order for supplies');
+      setNotes(scenario === 'success' || scenario === 'no-stock' ? '' : scenario);
+    } catch (e) {
+      if (!controller.signal.aborted) setError(message(e));
+    } finally {
+      if (!controller.signal.aborted) setFilling(false);
+      presetRequest.current = null;
+    }
+  }
   async function submit(event: FormEvent) {
-    event.preventDefault(); if (submitting.current) return;
+    event.preventDefault(); if (submitting.current || filling) return;
     if (!attempt && !validItems) { setError('Add at least one product with a valid whole-number quantity.'); return; }
     submitting.current = true; setBusy(true); setError('');
     try {
@@ -142,17 +193,29 @@ function OrderForm() {
   return <main className="orders-main">
     <a className="back-link" href="#/orders">← All orders</a>
     <div className="page-heading"><div><p className="eyebrow">A NEW DELIVERY</p><h1>Create an order</h1><p className="intro">Build your order, then tell us where it’s going.</p></div><span className="muted">All prices in USD</span></div>
+    <label className="test-order-picker">Fill with test data
+      <select disabled={locked} value="" onChange={(e) => fillTestOrder(e.target.value)} aria-describedby="test-order-help">
+        <option value="" disabled>Choose a test scenario…</option>
+        <option value="geocoding-timeout">Geocoding timeout — cancels the order</option>
+        <option value="payment-declined">Payment declined — cancels and releases stock</option>
+        <option value="payment-timeout">Payment timeout — payment pending</option>
+        <option value="payment-failed">Payment failed — provider unavailable, payment pending</option>
+        <option value="no-stock">No stock — no warehouse can fulfill the quantity</option>
+        <option value="success">Successful — payment succeeds</option>
+      </select>
+      <small id="test-order-help">{filling ? 'Checking stock and filling the order…' : 'Replaces the order details and items. Selects up to four products with varied quantities. Stocked scenarios fit one warehouse; No stock exceeds availability for one product.'}</small>
+    </label>
     <form className="checkout-layout" onSubmit={submit}>
       <div>
         <section className="orders-panel"><h2><span className="step-number">1</span> Choose your items</h2>
           {catalogError && <p role="alert" className="error">{catalogError} <button type="button" onClick={() => setReload(reload + 1)}>Reload products</button></p>}
+          <label>Find a product<input type="search" disabled={locked} placeholder="Search by product name or SKU…" value={search} onChange={(e) => { setSearch(e.target.value); setSearchOffset(0); }} /></label>
           <fieldset disabled={locked || loading}>
-            <label>Find a product<input type="search" placeholder="Search by product name or SKU…" value={search} onChange={(e) => { setSearch(e.target.value); setSearchOffset(0); }} /></label>
-            {loading ? <p role="status">Loading products…</p> : <div className="product-picker">{results.map((p) => <div className="picker-row" key={p.id}><div><strong>{p.name}</strong><small className="block">{p.sku} · {money(p.price)}</small><StockList product={p} /></div><button type="button" aria-label={`Add ${p.name}`} disabled={items.some((i) => i.product_id === p.id)} onClick={() => setItems([...items, { product_id: p.id, quantity: '1' }])}>{items.some((i) => i.product_id === p.id) ? 'Added' : '+ Add'}</button></div>)}{!results.length && <p className="detail">{search ? 'No matches. Try a different name or SKU.' : 'No products on this page.'}</p>}</div>}
+            {loading ? <p role="status">Loading products…</p> : <div className="product-picker">{results.map((p) => <div className="picker-row" key={p.id}><div><strong>{p.name}</strong><small className="block">{p.sku} · {money(p.price)}</small></div><button type="button" aria-label={`Add ${p.name}`} disabled={items.some((i) => i.product_id === p.id)} onClick={() => setItems([...items, { product_id: p.id, quantity: '1' }])}>{items.some((i) => i.product_id === p.id) ? 'Added' : '+ Add'}</button></div>)}{!results.length && <p className="detail">{search ? 'No matches. Try a different name or SKU.' : 'No products on this page.'}</p>}</div>}
             <Pagination offset={searchOffset} count={results.length} size={8} busy={locked || loading || !!catalogError} onChange={setSearchOffset} />
             <div className="selected-heading"><h3>Order items <span className="count">{items.length}</span></h3></div>
             {!items.length && <p className="detail">Add products above to start your order.</p>}
-            {items.map((item) => <div className="cart-row" key={item.product_id}><div><strong>{byId.get(item.product_id)?.name || `Product #${item.product_id}`}</strong><small className="block">{byId.has(item.product_id) ? `${money(byId.get(item.product_id)!.price)} each` : 'Product currently unavailable'}</small>{byId.has(item.product_id) && <StockList product={byId.get(item.product_id)!} />}</div><label className="quantity-label">Quantity<input aria-label={`Quantity for ${byId.get(item.product_id)?.name || item.product_id}`} type="number" required min={1} max={2147483647} step={1} value={item.quantity} onChange={(e) => setItems(items.map((i) => i.product_id === item.product_id ? { ...i, quantity: e.target.value } : i))} /></label><button type="button" className="text-button danger" aria-label={`Remove ${byId.get(item.product_id)?.name || item.product_id}`} onClick={() => setItems(items.filter((i) => i.product_id !== item.product_id))}>Remove</button></div>)}
+            {items.map((item) => <div className="cart-row" key={item.product_id}><div><strong>{byId.get(item.product_id)?.name || `Product #${item.product_id}`}</strong><small className="block">{byId.has(item.product_id) ? `${money(byId.get(item.product_id)!.price)} each` : 'Product currently unavailable'}</small></div><label className="quantity-label">Quantity<input aria-label={`Quantity for ${byId.get(item.product_id)?.name || item.product_id}`} type="number" required min={1} max={2147483647} step={1} value={item.quantity} onChange={(e) => setItems(items.map((i) => i.product_id === item.product_id ? { ...i, quantity: e.target.value } : i))} /></label><button type="button" className="text-button danger" aria-label={`Remove ${byId.get(item.product_id)?.name || item.product_id}`} onClick={() => setItems(items.filter((i) => i.product_id !== item.product_id))}>Remove</button></div>)}
           </fieldset>
         </section>
         <section className="orders-panel"><h2><span className="step-number">2</span> Customer information</h2><fieldset disabled={locked}>
@@ -171,25 +234,11 @@ function OrderForm() {
       <aside className="checkout-summary"><section className="orders-panel"><p className="eyebrow">READY WHEN YOU ARE</p><h2>Order summary</h2><div className="summary-line"><span>Products</span><strong>{items.length}</strong></div><div className="summary-line summary-total"><span>Estimated total</span><strong>{money(total)}</strong></div><p className="detail">USD · Final prices and availability are confirmed when you place the order.</p>
         {attempt && !busy && <p className="notice">Your last submission needs a result check. Retry below to check the same order safely.</p>}
         {error && <p role="alert" className="error">{error}</p>}
-        <button type="submit" className="primary place-order" disabled={busy || (!attempt && (loading || !!catalogError || !validItems))}>{busy ? 'Placing your order…' : attempt ? 'Check order result' : 'Place order'}</button>
+        <button type="submit" className="primary place-order" disabled={busy || filling || (!attempt && (loading || !!catalogError || !validItems))}>{busy ? 'Placing your order…' : attempt ? 'Check order result' : 'Place order'}</button>
         <p className="detail" role="status">{busy ? 'Finding a warehouse and processing payment. This may take a few seconds.' : 'We’ll choose the nearest warehouse that can fulfill your entire order.'}</p>
       </section></aside>
     </form>
   </main>;
-}
-
-function StockList({ product }: { product: Product }) {
-  return product.stock.length ? (
-    <ul className="stock-list" aria-label={`Stock for ${product.name}`}>
-      {product.stock.map((stock) => (
-        <li key={stock.warehouse_id}>
-          <span>{stock.warehouse_name}</span>
-          <strong>{stock.available} available</strong>
-          <small>({stock.on_hand} on hand · {stock.reserved} reserved)</small>
-        </li>
-      ))}
-    </ul>
-  ) : <small className="stock-line">No stock recorded</small>;
 }
 
 function OrderDetail({ id }: { id: number }) {

@@ -8,7 +8,7 @@ from app.adapters.inbound.http.dependencies import (
     PageOffset,
     WarehouseServiceDependency,
 )
-from app.domain.warehouses import WarehouseNotFound
+from app.domain.warehouses import StockFilter, WarehouseNotFound, WarehouseProductView
 
 router = APIRouter(prefix="/warehouses", tags=["warehouses"])
 
@@ -40,5 +40,19 @@ async def list_warehouses(
 async def get_warehouse(warehouse_id: int, service: WarehouseServiceDependency):
     try:
         return await service.get(warehouse_id)
+    except WarehouseNotFound as error:
+        raise HTTPException(status_code=404, detail="Warehouse not found.") from error
+
+
+@router.get("/{warehouse_id}/products", response_model=list[WarehouseProductView])
+async def warehouse_products(
+    warehouse_id: int,
+    service: WarehouseServiceDependency,
+    stock: StockFilter = "all",
+    limit: PageLimit = 20,
+    offset: PageOffset = 0,
+):
+    try:
+        return await service.products(warehouse_id, stock, limit, offset)
     except WarehouseNotFound as error:
         raise HTTPException(status_code=404, detail="Warehouse not found.") from error

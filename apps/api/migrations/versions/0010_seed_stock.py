@@ -11,7 +11,7 @@ depends_on = None
 
 def upgrade() -> None:
     # Rank records instead of assuming IDs from the initial seed. With five warehouses
-    # and 100 products, each receives 64 products: ten shared, plus a rotating assortment.
+    # and 10 products, two are shared by all warehouses, plus a rotating assortment.
     # Keep existing balances, reservations, and soft-deleted stock completely unchanged.
     op.execute(
         sa.text("""
@@ -26,7 +26,7 @@ def upgrade() -> None:
         INSERT INTO stock (warehouse_id, product_id, on_hand, reserved)
         SELECT w.id, p.id, (5 + (p.position * 7 + w.position * 13) % 46)::integer, 0
         FROM warehouse_catalog w CROSS JOIN product_catalog p
-        WHERE (p.position < 10 OR (p.position + w.position) % 5 < 3)
+        WHERE (p.position < 2 OR (p.position + w.position) % 5 < 3)
           AND NOT EXISTS (
               SELECT 1 FROM stock s WHERE s.warehouse_id = w.id AND s.product_id = p.id
           )
