@@ -5,7 +5,7 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from sqlalchemy import func, select
+from sqlalchemy import func, select, text
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -57,11 +57,23 @@ class SqlAlchemyOrderRepository:
 
     async def _view(self, row: Order) -> OrderView:
         items = await self._items(row.id)
-        history = await self.session.scalars(
-            select(OrderStatusHistory)
-            .where(OrderStatusHistory.order_id == row.id)
-            .order_by(OrderStatusHistory.created_at, OrderStatusHistory.id)
+        history = list(
+            await self.session.scalars(
+                select(OrderStatusHistory)
+                .where(OrderStatusHistory.order_id == row.id)
+                .order_by(OrderStatusHistory.created_at, OrderStatusHistory.id)
+            )
         )
+        customer = await self.session.get(Customer, row.customer_id)
+        return self._make_view(row, customer, items, history)
+
+    @staticmethod
+    def _make_view(
+        row: Order,
+        customer: Customer | None,
+        items: list[OrderItem],
+        history: list[OrderStatusHistory] | tuple[OrderStatusHistory, ...],
+    ) -> OrderView:
         return OrderView(
             id=row.id,
             status=row.status,
@@ -83,7 +95,7 @@ class SqlAlchemyOrderRepository:
                     "phone": customer.phone,
                     "email": customer.email,
                 }
-                if (customer := await self.session.get(Customer, row.customer_id)) is not None
+                if customer is not None
                 else None
             ),
             created_at=row.created_at,
@@ -372,14 +384,62 @@ class SqlAlchemyOrderRepository:
 
     async def list(self, limit: int, offset: int) -> list[OrderView]:
         async with self.session.begin():
+            # Batch hydration without row locks is safe because every statement below reads
+            # from one PostgreSQL transaction snapshot. Locks would serialize each relation
+            # read with writers and turn a paginated list into a lock-held N+1 read.
+            await self.session.execute(text("SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"))
             rows = list(
                 await self.session.scalars(
                     select(Order)
                     .order_by(Order.id.desc())
                     .limit(limit)
                     .offset(offset)
-                    .with_for_update(read=True)
                     .execution_options(populate_existing=True)
                 )
             )
-            return [await self._view(row) for row in rows]
+            if not rows:
+                return []
+
+            order_ids = [row.id for row in rows]
+            items = list(
+                await self.session.scalars(
+                    select(OrderItem)
+                    .where(OrderItem.order_id.in_(order_ids))
+                    .order_by(OrderItem.order_id, OrderItem.product_id)
+                )
+            )
+            history = list(
+                await self.session.scalars(
+                    select(OrderStatusHistory)
+                    .where(OrderStatusHistory.order_id.in_(order_ids))
+                    .order_by(
+                        OrderStatusHistory.order_id,
+                        OrderStatusHistory.created_at,
+                        OrderStatusHistory.id,
+                    )
+                )
+            )
+            customer_ids = {row.customer_id for row in rows if row.customer_id is not None}
+            customers = {
+                customer.id: customer
+                for customer in await self.session.scalars(
+                    select(Customer).where(Customer.id.in_(customer_ids))
+                )
+            }
+            items_by_order: dict[int, list[OrderItem]] = {order_id: [] for order_id in order_ids}
+            history_by_order: dict[int, list[OrderStatusHistory]] = {
+                order_id: [] for order_id in order_ids
+            }
+            for item in items:
+                items_by_order[item.order_id].append(item)
+            for entry in history:
+                history_by_order[entry.order_id].append(entry)
+            return [
+                self._make_view(
+                    row,
+                    customers.get(row.customer_id),
+                    items_by_order[row.id],
+                    history_by_order[row.id],
+                )
+                for row in rows if row is not None
+            ]

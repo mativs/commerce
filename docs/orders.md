@@ -231,7 +231,9 @@ Database triggers append status history in the same transaction as each status c
 
 **Decision:** evidence must commit with the change it describes. Application logs help trace requests; durable history explains the order even after logs expire. State checks govern the application's transitions; the history trigger records changes, while monitoring can detect invalid sequences introduced outside that flow.
 
-`GET /orders/{id}` and order-list reads use shared order locks while loading items and history, keeping those reads consistent with the application's state-changing transactions.
+`GET /orders/{id}` uses a shared order lock while loading its related data.
+
+The order-list read avoids holding locks across per-order hydration: it selects the page, items, history, and customers in batches inside a PostgreSQL `REPEATABLE READ` transaction, so every returned order is assembled from one deliberate snapshot.
 
 | `POST /orders` response | Meaning |
 | --- | --- |
