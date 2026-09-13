@@ -88,15 +88,19 @@ class SqlAlchemyProductRepository:
             if product is None:
                 raise ProductNotFound
             rows = (
-                await self.session.execute(
-                    select(Stock, Warehouse.name)
-                    .join(Warehouse, Warehouse.id == Stock.warehouse_id)
-                    .where(
-                        Stock.product_id == product.id,
-                        Warehouse.deleted_at.is_(None),
+                (
+                    await self.session.execute(
+                        select(Stock, Warehouse.name)
+                        .join(Warehouse, Warehouse.id == Stock.warehouse_id)
+                        .where(
+                            Stock.product_id == product.id,
+                            Warehouse.deleted_at.is_(None),
+                        )
+                        .order_by(Warehouse.id)
                     )
-                    .order_by(Warehouse.id)
                 )
-            ).tuples().all()
+                .tuples()
+                .all()
+            )
             stock = [self._stock_view(item, name) for item, name in rows]
             return self._view(product, stock)

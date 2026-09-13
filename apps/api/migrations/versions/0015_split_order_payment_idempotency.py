@@ -15,27 +15,27 @@ def upgrade() -> None:
     op.alter_column("orders", "idempotency_key", new_column_name="order_idempotency_key")
     # Keep both fields nullable while the legacy rows are being migrated.
     op.alter_column("orders", "order_idempotency_key", nullable=True)
-    op.add_column(
-        "orders", sa.Column("payment_idempotency_key", sa.String(128), nullable=True)
-    )
+    op.add_column("orders", sa.Column("payment_idempotency_key", sa.String(128), nullable=True))
     connection = op.get_bind()
     # Data migration: legacy orders receive independent backend-generated keys.
-    order_ids = connection.execute(
-        sa.text("SELECT id FROM orders WHERE order_idempotency_key IS NULL")
-    ).scalars().all()
+    order_ids = (
+        connection.execute(sa.text("SELECT id FROM orders WHERE order_idempotency_key IS NULL"))
+        .scalars()
+        .all()
+    )
     for order_id in order_ids:
         connection.execute(
-            sa.text(
-                "UPDATE orders SET order_idempotency_key = :order_key WHERE id = :order_id"
-            ),
+            sa.text("UPDATE orders SET order_idempotency_key = :order_key WHERE id = :order_id"),
             {
                 "order_key": f"legacy-order:{uuid4()}",
                 "order_id": order_id,
             },
         )
-    payment_order_ids = connection.execute(
-        sa.text("SELECT id FROM orders WHERE payment_idempotency_key IS NULL")
-    ).scalars().all()
+    payment_order_ids = (
+        connection.execute(sa.text("SELECT id FROM orders WHERE payment_idempotency_key IS NULL"))
+        .scalars()
+        .all()
+    )
     for order_id in payment_order_ids:
         connection.execute(
             sa.text(
