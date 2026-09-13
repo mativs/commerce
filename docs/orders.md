@@ -114,10 +114,11 @@ The fingerprint includes customer, shipping, items, notes, and payment input. Re
 
 For a new order, the same transaction then:
 
-1. Takes shared product locks in product-ID order and checks that every product exists, is active, and is not deleted.
-2. Inserts the order items. A database trigger copies each product's current price into `unit_price`.
-3. Calculates `total_amount` from saved unit prices and quantities using Python `Decimal`.
-4. Commits the order, items, total, and initial status history together.
+1. Creates or reuses the customer identified by normalized email and links it to the order. If the email already exists, it reuses that customer's ID; **it does not overwrite the existing name or phone**.
+2. Takes shared product locks in product-ID order and checks that every product exists, is active, and is not deleted.
+3. Inserts the order items. A database trigger copies each product's current price into `unit_price`.
+4. Calculates `total_amount` from saved unit prices and quantities using Python `Decimal`.
+5. Commits the customer link, order, items, total, and initial status history together.
 
 Unavailable products or an unsupported total return `422` and roll back this entire transaction. No partial order or consumed idempotency key remains.
 
@@ -125,13 +126,11 @@ Unavailable products or an unsupported total return `422` and roll back this ent
 
 The assessment stores test card numbers in the database and temporarily in browser session storage for pending retries. API responses omit them. Real payment integration requires provider tokenization.
 
-## 3. Attach the customer
+## 3. Create or attach the customer
 
-A separate transaction locks the order and links it to a customer identified by normalized email. If no customer exists, it inserts one. If the email already exists, it reuses that customer's ID; **it does not overwrite the existing name or phone**.
+Customer creation or reuse and the order link happen inside the atomic order-creation transaction. The customer is identified by normalized email; if no customer exists, it is inserted. If the email already exists, its ID is reused; **the existing name and phone are not overwritten**.
 
 **Decision:** customer identity is shared across purchases. Delivery details belong to the individual order and remain a shipping snapshot. There is no separate saved-address CRUD model.
-
-This step commits after order creation. A crash between the two transactions can leave a `CREATED` order without a customer link. That is one of the boundaries a future recovery process must handle.
 
 ## 4. Locate the shipping address
 
@@ -250,7 +249,7 @@ Successful order responses include `Location: /orders/{id}`, items, chronologica
 | Interruption point | Durable state | What a replay does |
 | --- | --- | --- |
 | Before creation commits | No order from that attempt. | Can create and process the order. |
-| After creation, before booking | `CREATED`; customer, coordinates, or decision evidence may be incomplete. | Returns it without resuming. |
+| After creation, before booking | `CREATED`; coordinates or decision evidence may be incomplete, but the customer link is already committed with the order. | Returns it without resuming. |
 | After reservation, before payment initiation | `BOOKED`, with stock reserved. | Returns it without starting payment. |
 | After `PAYING`, before finalization | `PAYING`, with stock reserved; provider outcome uncertain. | Returns it without another charge. |
 | After finalization, before HTTP response | `PAID` or `CANCELLED`. | Returns the saved result. |
