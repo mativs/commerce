@@ -132,6 +132,7 @@ class Order(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True)
     status: Mapped[str] = mapped_column(String(10), nullable=False, server_default="CREATED")
+    warehouse_decision: Mapped[dict | None] = mapped_column(JSONB)
     shipping_address: Mapped[dict] = mapped_column(JSONB, nullable=False, server_default="{}")
     latitude: Mapped[float | None] = mapped_column(Float)
     longitude: Mapped[float | None] = mapped_column(Float)

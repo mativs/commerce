@@ -156,3 +156,16 @@ h3 { font-size: 0.95rem; }
 .monitor-check span, .monitor-check small { font-size: .85rem; }
 .monitoring-main td { line-height: 1.5; }
 @media (max-width: 700px) { .monitor-summary { grid-template-columns: 1fr 1fr; } .monitor-checks { grid-template-columns: 1fr; } .commerce-header { flex-wrap: wrap; } .commerce-header nav { flex-wrap: wrap; } }
+
+.warehouse-decision-table caption { text-align: left; padding: 0 0 16px; color: #52636e; font-size: 0.875rem; }
+.warehouse-decision-table .warehouse-selected { background: #edf7ef; }
+.warehouse-decision-table td { vertical-align: top; }
+
+.order-map-section { margin-bottom: 24px; }
+.order-warehouse-map { height: 380px; width: 100%; border-radius: 10px; isolation: isolate; }
+.order-map-marker span { display: grid; place-items: center; width: 28px; height: 28px; border: 2px solid white; border-radius: 50%; color: white; font: bold 14px sans-serif; box-shadow: 0 1px 5px #0006; }
+.order-map-legend { display: flex; flex-wrap: wrap; gap: 12px 20px; margin-top: 14px; font-size: 0.875rem; }
+.order-map-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.order-map-legend i { width: 12px; height: 12px; border-radius: 50%; }
+.order-map-section .summary-line { gap: 12px; flex-wrap: wrap; }
+@media (max-width: 600px) { .order-warehouse-map { height: 300px; } }

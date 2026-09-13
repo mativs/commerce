@@ -114,10 +114,27 @@ export type OrderInput = {
   credit_card_number: string;
   payment_description: string;
 };
+export type WarehouseDecision = {
+  version: number;
+  evaluated_at: string;
+  strategy: string;
+  shipping_coordinates: { latitude: number; longitude: number };
+  selected_warehouse_id: number | null;
+  candidates: {
+    warehouse_id: number;
+    warehouse_name: string;
+    coordinates: { latitude: number; longitude: number };
+    distance_km: number;
+    rank: number;
+    outcome: 'NOT_ATTEMPTED' | 'REJECTED' | 'SELECTED';
+    reason: string | null;
+  }[];
+};
 export type Order = Omit<OrderInput, 'items'> & {
   id: number;
   status: 'CREATED' | 'BOOKED' | 'PAYING' | 'PAID' | 'CANCELLED';
   warehouse_id: number | null;
+  warehouse_decision: WarehouseDecision | null;
   latitude: number | null;
   longitude: number | null;
   total_amount: string;

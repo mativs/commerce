@@ -54,10 +54,15 @@ class OrderService:
 
         # STEP 4: For each warehouse with stock we try to reserve
         candidates = await self.repository.candidates(order.id)
-        candidates.sort(
-            key=lambda candidate: (distance_km(coordinates, candidate.coordinates), candidate.id)
+        ranked = sorted(
+            [
+                (candidate, distance_km(coordinates, candidate.coordinates))
+                for candidate in candidates
+            ],
+            key=lambda entry: (entry[1], entry[0].id),
         )
-        for candidate in candidates:
+        await self.repository.record_warehouse_decision(order.id, coordinates, ranked)
+        for candidate, _ in ranked:
             if await self.repository.reserve(order.id, candidate.id):
                 break
         else:

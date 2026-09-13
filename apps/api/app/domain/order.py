@@ -41,6 +41,7 @@ class CreateOrder:
 class WarehouseCandidate:
     id: int
     coordinates: Coordinates
+    name: str = ""
 
 
 @dataclass(frozen=True)
@@ -75,6 +76,7 @@ class OrderView:
     updated_at: datetime
     items: list[OrderItemView]
     history: list[StatusChange]
+    warehouse_decision: dict | None = None
 
 
 class InvalidOrder(Exception):

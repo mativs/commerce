@@ -13,6 +13,13 @@ class OrderRepository(Protocol):
 
     async def candidates(self, order_id: int) -> list[WarehouseCandidate]: ...
 
+    async def record_warehouse_decision(
+        self,
+        order_id: int,
+        coordinates: Coordinates,
+        ranked: list[tuple[WarehouseCandidate, float]],
+    ) -> None: ...
+
     async def reserve(self, order_id: int, warehouse_id: int) -> bool: ...
 
     async def ensure_customer(self, order_id: int, customer: CustomerDetails) -> None: ...

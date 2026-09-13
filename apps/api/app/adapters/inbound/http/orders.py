@@ -100,6 +100,30 @@ class HistoryOutput(BaseModel):
     created_at: datetime
 
 
+class DecisionCoordinatesOutput(BaseModel):
+    latitude: float
+    longitude: float
+
+
+class WarehouseDecisionCandidateOutput(BaseModel):
+    warehouse_id: int
+    warehouse_name: str
+    coordinates: DecisionCoordinatesOutput
+    distance_km: float
+    rank: int
+    outcome: Literal["NOT_ATTEMPTED", "REJECTED", "SELECTED"]
+    reason: str | None
+
+
+class WarehouseDecisionOutput(BaseModel):
+    version: int
+    evaluated_at: datetime
+    strategy: str
+    shipping_coordinates: DecisionCoordinatesOutput
+    selected_warehouse_id: int | None
+    candidates: list[WarehouseDecisionCandidateOutput]
+
+
 class OrderOutput(BaseModel):
     id: int
     status: Literal["CREATED", "BOOKED", "PAYING", "PAID", "CANCELLED"]
@@ -107,6 +131,7 @@ class OrderOutput(BaseModel):
     latitude: float | None
     longitude: float | None
     warehouse_id: int | None
+    warehouse_decision: WarehouseDecisionOutput | None
     total_amount: Decimal
     notes: str | None
     failure_reason: str | None

@@ -1,6 +1,8 @@
 import hashlib
 import json
+from copy import deepcopy
 from dataclasses import asdict
+from datetime import UTC, datetime
 from decimal import Decimal
 
 from sqlalchemy import func, select
@@ -68,6 +70,7 @@ class SqlAlchemyOrderRepository:
             latitude=row.latitude,
             longitude=row.longitude,
             warehouse_id=row.warehouse_id,
+            warehouse_decision=row.warehouse_decision,
             total_amount=row.total_amount,
             notes=row.notes,
             failure_reason=row.failure_reason,
@@ -187,9 +190,55 @@ class SqlAlchemyOrderRepository:
                 WarehouseCandidate(
                     warehouse.id,
                     Coordinates(latitude=warehouse.latitude, longitude=warehouse.longitude),
+                    warehouse.name,
                 )
                 for warehouse in warehouses
             ]
+
+    async def record_warehouse_decision(
+        self,
+        order_id: int,
+        coordinates: Coordinates,
+        ranked: list[tuple[WarehouseCandidate, float]],
+    ) -> None:
+        async with self.session.begin():
+            order = await self._order(order_id, lock=True)
+            if order.status == "CREATED" and order.warehouse_decision is None:
+                order.warehouse_decision = {
+                    "version": 1,
+                    "evaluated_at": datetime.now(UTC).isoformat(),
+                    "strategy": "nearest_available_haversine_then_warehouse_id",
+                    "shipping_coordinates": asdict(coordinates),
+                    "selected_warehouse_id": None,
+                    "candidates": [
+                        {
+                            "warehouse_id": candidate.id,
+                            "warehouse_name": candidate.name,
+                            "coordinates": asdict(candidate.coordinates),
+                            "distance_km": distance,
+                            "rank": rank,
+                            "outcome": "NOT_ATTEMPTED",
+                            "reason": None,
+                        }
+                        for rank, (candidate, distance) in enumerate(ranked, start=1)
+                    ],
+                }
+
+    @staticmethod
+    def _record_reservation(
+        order: Order, warehouse_id: int, outcome: str, reason: str | None = None
+    ) -> None:
+        if order.warehouse_decision is None:
+            return
+        decision = deepcopy(order.warehouse_decision)
+        for candidate in decision["candidates"]:
+            if candidate["warehouse_id"] == warehouse_id:
+                candidate["outcome"] = outcome
+                candidate["reason"] = reason
+                break
+        if outcome == "SELECTED":
+            decision["selected_warehouse_id"] = warehouse_id
+        order.warehouse_decision = decision
 
     async def reserve(self, order_id: int, warehouse_id: int) -> bool:
         # One transaction per candidate: failed candidates leave no locks behind.
@@ -206,6 +255,7 @@ class SqlAlchemyOrderRepository:
                 .with_for_update(read=True)
             )
             if warehouse is None:
+                self._record_reservation(order, warehouse_id, "REJECTED", "WAREHOUSE_UNAVAILABLE")
                 return False
             product_ids = list(
                 await self.session.scalars(
@@ -220,6 +270,7 @@ class SqlAlchemyOrderRepository:
                 )
             )
             if len(product_ids) != len(quantities):
+                self._record_reservation(order, warehouse_id, "REJECTED", "PRODUCT_UNAVAILABLE")
                 return False
             stocks = list(
                 await self.session.scalars(
@@ -236,9 +287,11 @@ class SqlAlchemyOrderRepository:
             if len(stocks) != len(quantities) or any(
                 s.on_hand - s.reserved < quantities[s.product_id] for s in stocks
             ):
+                self._record_reservation(order, warehouse_id, "REJECTED", "INSUFFICIENT_STOCK")
                 return False
             for stock in stocks:
                 stock.reserved += quantities[stock.product_id]
+            self._record_reservation(order, warehouse_id, "SELECTED")
             order.warehouse_id = warehouse_id
             order.status = "BOOKED"
             return True

@@ -94,6 +94,14 @@ def test_checkout_snapshots_duplicates_history_and_replay(checkout):
     assert response.status_code == 201, response.text
     order = response.json()
     assert order["status"] == "PAID" and order["warehouse_id"] == warehouses[0]
+    decision = order["warehouse_decision"]
+    assert decision["selected_warehouse_id"] == warehouses[0]
+    assert decision["shipping_coordinates"] == {"latitude": -38, "longitude": -57.57}
+    assert [c["warehouse_id"] for c in decision["candidates"]] == warehouses
+    assert [c["rank"] for c in decision["candidates"]] == [1, 2]
+    assert [c["outcome"] for c in decision["candidates"]] == ["SELECTED", "NOT_ATTEMPTED"]
+    assert decision["candidates"][0]["distance_km"] == 0
+    assert decision["candidates"][1]["distance_km"] == pytest.approx(11.1195, rel=1e-5)
     assert order["payment_description"] == "Demo checkout"
     assert order["payment_identifier"].startswith("pay_")
     payment_key = client.app.state.payment_gateway.charge.call_args.kwargs["idempotency_key"]
@@ -142,6 +150,15 @@ def test_failures_are_durable(checkout, failure, reason, history, reserved):
     assert order["customer"]["email"] == "ana@example.com"
     assert [h["status"] for h in order["history"]] == history
     assert order["failure_reason"] == reason
+    decision = order["warehouse_decision"]
+    if failure == "geo":
+        assert decision is None
+    elif failure == "stock":
+        assert decision["candidates"] == []
+        assert decision["selected_warehouse_id"] is None
+    else:
+        assert decision["selected_warehouse_id"] == order["warehouse_id"]
+        assert decision["candidates"][0]["outcome"] == "SELECTED"
     assert order["history"][-1]["reason"] == reason
     assert sum(s[3] for s in stock_rows(sessions)) == reserved
     assert all(s[2] == 10 for s in stock_rows(sessions))
@@ -435,3 +452,51 @@ def test_stock_reservation_and_release_are_audited(checkout):
             ).all()
 
     assert asyncio.run(read()) == [("0", "2"), ("0", "2"), ("2", "0"), ("2", "0")]
+
+
+def test_decision_records_fallback_and_survives_warehouse_changes(checkout, monkeypatch):
+    client, sessions, body, warehouses = checkout
+    original_reserve = SqlAlchemyOrderRepository.reserve
+
+    async def reserve_after_stock_change(self, order_id, warehouse_id):
+        if warehouse_id == warehouses[0]:
+            async with sessions() as session, session.begin():
+                await session.execute(
+                    text("UPDATE stock SET on_hand=0 WHERE warehouse_id=:id"),
+                    {"id": warehouse_id},
+                )
+        return await original_reserve(self, order_id, warehouse_id)
+
+    monkeypatch.setattr(SqlAlchemyOrderRepository, "reserve", reserve_after_stock_change)
+    response = client.post("/orders", json=body, headers={"Idempotency-Key": "fallback"})
+    assert response.status_code == 201, response.text
+    order = response.json()
+    decision = order["warehouse_decision"]
+    assert order["warehouse_id"] == decision["selected_warehouse_id"] == warehouses[1]
+    assert [c["outcome"] for c in decision["candidates"]] == ["REJECTED", "SELECTED"]
+    assert decision["candidates"][0]["reason"] == "INSUFFICIENT_STOCK"
+
+    async def change_warehouses():
+        async with sessions() as session, session.begin():
+            await session.execute(text("UPDATE warehouses SET name='Moved', latitude=0"))
+
+    asyncio.run(change_warehouses())
+    assert client.get(response.headers["location"]).json()["warehouse_decision"] == decision
+    replay = client.post("/orders", json=body, headers={"Idempotency-Key": "fallback"})
+    assert replay.json()["warehouse_decision"] == decision
+
+
+def test_decision_ties_use_warehouse_id(checkout):
+    client, sessions, body, warehouses = checkout
+
+    async def same_coordinates():
+        async with sessions() as session, session.begin():
+            await session.execute(text("UPDATE warehouses SET latitude=-38"))
+
+    asyncio.run(same_coordinates())
+    response = client.post("/orders", json=body, headers={"Idempotency-Key": "tie"})
+    assert response.status_code == 201, response.text
+    decision = response.json()["warehouse_decision"]
+    assert [c["warehouse_id"] for c in decision["candidates"]] == sorted(warehouses)
+    assert [c["distance_km"] for c in decision["candidates"]] == [0, 0]
+    assert decision["selected_warehouse_id"] == min(warehouses)

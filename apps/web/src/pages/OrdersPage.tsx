@@ -1,3 +1,4 @@
+import { OrderWarehouseMap } from '../components/OrderWarehouseMap';
 import { Pagination } from '../components/Pagination';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { ApiError, inventoryApi, orderApi, productApi, warehouseApi, type Order, type OrderInput, type Product, type ShippingAddressInput, type Warehouse } from '../api/client';
@@ -241,6 +242,43 @@ function OrderForm() {
   </main>;
 }
 
+const reservationReasons: Record<string, string> = {
+  WAREHOUSE_UNAVAILABLE: 'Warehouse was no longer available when reservation was attempted.',
+  PRODUCT_UNAVAILABLE: 'An order product was no longer available when reservation was attempted.',
+  INSUFFICIENT_STOCK: 'Stock was no longer sufficient when reservation was attempted.',
+};
+const reservationLabels = { NOT_ATTEMPTED: 'Not attempted', REJECTED: 'Rejected', SELECTED: 'Selected' };
+
+function WarehouseDecisionPanel({ order }: { order: Order }) {
+  const decision = order.warehouse_decision;
+  const selected = decision?.candidates.find((candidate) => candidate.warehouse_id === decision.selected_warehouse_id);
+  return <section className="orders-panel" aria-labelledby="warehouse-decision-heading">
+    <h2 id="warehouse-decision-heading">Warehouse decision</h2>
+    <OrderWarehouseMap order={order} />
+    {!decision ? <p className="detail">No warehouse decision was recorded for this order. Older orders and orders that have not reached warehouse selection have no saved evidence.</p> : <>
+      <p><strong>{decision.selected_warehouse_id !== null
+        ? `Selected: ${selected?.warehouse_name || 'Warehouse'} (#${decision.selected_warehouse_id})`
+        : 'No warehouse selected'}</strong></p>
+      <p className="detail">{decision.strategy === 'nearest_available_haversine_then_warehouse_id'
+        ? 'Warehouses with enough available stock for every item were ranked by distance. The nearest warehouse that successfully reserved the items was selected; equal distances use the lower warehouse ID.'
+        : `Selection strategy: ${decision.strategy}`}</p>
+      <p className="detail">Evaluated {activityDate(decision.evaluated_at)} · Delivery coordinates: {decision.shipping_coordinates.latitude}, {decision.shipping_coordinates.longitude}</p>
+      {decision.candidates.length ? <div className="table-scroll"><table className="orders-table warehouse-decision-table">
+        <caption>Candidate warehouses in selection order. Distances are straight-line (great-circle) kilometers, not driving distances.</caption>
+        <thead><tr><th scope="col">Rank</th><th scope="col">Warehouse</th><th scope="col">Distance (km)</th><th scope="col">Reservation outcome</th></tr></thead>
+        <tbody>{decision.candidates.map((candidate) => <tr key={candidate.warehouse_id} className={candidate.outcome === 'SELECTED' ? 'warehouse-selected' : undefined}>
+          <td>{candidate.rank}</td>
+          <td><a href={`#/warehouses/${candidate.warehouse_id}`}>{candidate.warehouse_name || 'Warehouse'} (#{candidate.warehouse_id})</a><small className="block">Coordinates: {candidate.coordinates.latitude}, {candidate.coordinates.longitude}</small></td>
+          <td className="money">{candidate.distance_km.toLocaleString(undefined, { maximumFractionDigits: 6 })}</td>
+          <td><strong>{reservationLabels[candidate.outcome]}</strong>{candidate.reason && <small className="block">{reservationReasons[candidate.reason] || candidate.reason}</small>}</td>
+        </tr>)}</tbody>
+      </table></div> : <p>No warehouse had enough available stock for all items when evaluated.</p>}
+      {decision.selected_warehouse_id === null && decision.candidates.some((candidate) => candidate.outcome === 'NOT_ATTEMPTED') && <p className="detail">Selection has not completed. Some candidates have not been attempted; refresh the order to check for updates.</p>}
+      <p className="detail">This is the saved evidence from checkout. Later warehouse changes or payment failures do not change this record. Warehouses excluded by the stock check are not listed.</p>
+    </>}
+  </section>;
+}
+
 function OrderDetail({ id }: { id: number }) {
   const [order, setOrder] = useState<Order | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -269,6 +307,7 @@ function OrderDetail({ id }: { id: number }) {
     {order && <><div className={`order-outcome outcome-${order.status.toLowerCase()}`} role="status"><Badge status={order.status} /><p>{order.status === 'PAID' ? 'Your order is confirmed and paid. Your items are reserved for delivery.' : order.status === 'CANCELLED' ? reasons[order.failure_reason || ''] || 'This order has been cancelled.' : 'Your order is saved. Payment or processing is not yet confirmed. Refresh to check its status; do not place the same order again.'}</p></div>
       <div className="checkout-layout"><section className="orders-panel"><h2>Items ordered</h2><div className="table-scroll"><table className="orders-table"><thead><tr><th>Product</th><th>Quantity</th><th>Unit price</th><th>Amount</th></tr></thead><tbody>{order.items.map((item) => <tr key={item.product_id}><td>{products.find((p) => p.id === item.product_id)?.name || `Product #${item.product_id}`}<small className="block">{products.find((p) => p.id === item.product_id)?.sku}</small></td><td>{item.quantity}</td><td className="money">{money(item.unit_price)}</td><td className="money">{money(Number(item.unit_price) * item.quantity)}</td></tr>)}</tbody></table></div><div className="summary-line summary-total"><span>Total · USD</span><strong>{money(order.total_amount)}</strong></div>{order.notes && <><h3>Order notes</h3><p className="preserve-lines">{order.notes}</p></>}</section>
       <section className="orders-panel"><h2>Delivery details</h2>{address && <address><strong>{address.recipient_name}</strong><br />{address.address_line1}{address.address_line2 && <><br />{address.address_line2}</>}<br />{address.city}, {address.state} {address.postal_code}<br />{address.country_code}{address.phone && <><br />{address.phone}</>}</address>}{address?.delivery_instructions && <><h3>Delivery instructions</h3><p className="preserve-lines">{address.delivery_instructions}</p></>}<hr /><h3>Assigned warehouse</h3><p>{order.warehouse_id ? warehouses.find((w) => w.id === order.warehouse_id)?.name || `Warehouse #${order.warehouse_id}` : 'Not assigned'}</p>{order.latitude !== null && order.longitude !== null && <small>Delivery coordinates: {order.latitude.toFixed(5)}, {order.longitude.toFixed(5)}</small>}</section></div>
+      <WarehouseDecisionPanel order={order} />
       {order.customer && <section className="orders-panel"><h2>Customer</h2><p><strong>{order.customer.first_name} {order.customer.last_name}</strong><br />{order.customer.email}<br />{order.customer.phone}</p></section>}
       <section className="orders-panel"><h2>Order activity</h2><ol className="order-timeline">{order.history.map((event, index) => <li key={index}><div><strong>{labels[event.status] || event.status}</strong><small className="block">{activityDate(event.created_at)}</small>{event.reason && <p>{reasons[event.reason] || event.reason}</p>}</div></li>)}</ol>{order.payment_identifier && <p className="detail">Payment reference: <strong>{order.payment_identifier}</strong></p>}</section>
     </>}

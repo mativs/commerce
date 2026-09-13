@@ -177,3 +177,38 @@ response is lost, **Check run status** reuses the saved request identity rather 
 creating a duplicate run. That pending identity is retained for the browser tab across
 reloads. Running result pages refresh automatically; historical pages offer manual
 refresh. No repair or payment actions are exposed.
+
+
+### Warehouse decision evidence
+
+Migration `0020` adds the nullable `orders.warehouse_decision` JSONB snapshot.
+Order create, detail, and list responses expose it for a future order information view.
+It records version, evaluation time, strategy, shipping coordinates, selected warehouse
+ID, and candidates in selection order. Each candidate includes its warehouse ID and
+name, coordinate snapshot, unrounded Haversine distance in kilometers, rank,
+reservation outcome, and rejection reason. Distances are great-circle distances,
+not driving distances. Equal distances use the lower warehouse ID.
+
+Candidates are the non-deleted warehouses with enough available stock for every
+order item at evaluation time; warehouses excluded by this stock query are not included.
+The snapshot is saved before reservation. Outcomes start as `NOT_ATTEMPTED`;
+each attempt saves `REJECTED` (with `WAREHOUSE_UNAVAILABLE`, `PRODUCT_UNAVAILABLE`,
+or `INSUFFICIENT_STOCK`) or `SELECTED` in the same transaction as the reservation.
+Candidates after the winner remain `NOT_ATTEMPTED`.
+
+An empty candidate list means evaluation found no eligible warehouse. A null snapshot
+means no evidence was recorded (historical order, geocoding failure, or checkout not
+yet at selection); historical decisions are not reconstructed. A snapshot with no
+selection and unattempted candidates can indicate processing interrupted before
+reservation. Payment failure does not erase the selection. Replays and later changes
+to warehouse names, coordinates, or stock do not recompute the saved evidence.
+
+The order detail map uses Leaflet and OpenStreetMap tiles without an API key.
+It shows saved shipping and candidate coordinates, plus all current warehouses
+loaded through the paginated warehouse API. Current warehouses without candidate
+evidence are labeled separately; their current locations do not reconstruct historical
+eligibility. Selected warehouses and shipping locations have distinct markers, and
+popups identify the coordinate source. Map tile failures leave markers and the decision
+table available. OpenStreetMap attribution remains visible; browser requests use normal
+HTTP caching, with no offline download or bulk prefetch. Public tiles are best-effort
+and subject to https://operations.osmfoundation.org/policies/tiles/.
