@@ -11,10 +11,19 @@ def parse_origins(value: object) -> object:
     return value
 
 
+def normalize_database_url(value: object) -> object:
+    if isinstance(value, str):
+        if value.startswith("postgres://"):
+            return "postgresql+asyncpg://" + value.removeprefix("postgres://")
+        if value.startswith("postgresql://"):
+            return "postgresql+asyncpg://" + value.removeprefix("postgresql://")
+    return value
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    database_url: PostgresDsn
+    database_url: Annotated[PostgresDsn, BeforeValidator(normalize_database_url)]
     environment: str = Field(default="development", min_length=1)
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
     cors_origins: Annotated[list[str], NoDecode, BeforeValidator(parse_origins)] = []
