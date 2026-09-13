@@ -7,6 +7,7 @@ from app.application.ports.orders import OrderRepository
 from app.application.ports.payment import (
     PaymentDeclined,
     PaymentGateway,
+    PaymentResponseInvalid,
     PaymentSucceeded,
     PaymentUnavailable,
 )
@@ -80,6 +81,13 @@ class OrderService:
                     order.total_amount,
                     idempotency_key=payment_idempotency_key,
                 )
+        except PaymentResponseInvalid:
+            logger.warning(
+                "order.payment_pending",
+                extra={"order_id": order.id, "outcome": "PAYMENT_RESPONSE_INVALID"},
+            )
+            # Invalid provider data does not establish whether payment succeeded.
+            return await self.repository.get(order.id)
         except (PaymentUnavailable, TimeoutError):
             logger.warning(
                 "order.payment_pending",

@@ -183,6 +183,30 @@ def test_failures_are_durable(checkout, failure, reason, history, reserved):
         client.app.state.payment_gateway.charge.assert_not_awaited()
 
 
+@pytest.mark.parametrize("reference", [None, "", "   ", "a" * 129])
+def test_invalid_provider_reference_is_unknown_checkout_outcome(checkout, reference):
+    client, sessions, body, _ = checkout
+
+    client.app.state.payment_gateway.charge.side_effect = lambda *args, **kwargs: PaymentSucceeded(
+        reference
+    )
+    response = client.post("/orders", json=body, headers={"Idempotency-Key": "invalid-reference"})
+
+    assert response.status_code == 202, response.text
+    order = response.json()
+    assert order["status"] == "PAYING"
+    assert order["failure_reason"] is None
+    assert [h["status"] for h in order["history"]] == ["CREATED", "BOOKED", "PAYING"]
+    assert sum(s[3] for s in stock_rows(sessions)) == 4
+
+    replay = client.post(
+        "/orders", json=body, headers={"Idempotency-Key": "invalid-reference"}
+    )
+    assert replay.status_code == 202
+    assert replay.json() == order
+    client.app.state.payment_gateway.charge.assert_awaited_once()
+
+
 @pytest.mark.parametrize(
     "items",
     [

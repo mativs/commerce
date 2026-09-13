@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.adapters.outbound.payments.mock import MockPaymentGateway
-from app.application.ports.payment import PaymentSucceeded
+from app.application.ports.payment import PaymentResponseInvalid, PaymentSucceeded
 from app.domain.order import PaymentDetails
 
 
@@ -30,6 +30,11 @@ def test_mock_payment_always_succeeds_with_delay_and_stable_reference():
     asyncio.run(check())
 
 
-def test_success_requires_nonempty_provider_reference():
-    with pytest.raises(ValueError, match="nonempty provider reference"):
-        PaymentSucceeded("   ")
+@pytest.mark.parametrize("reference", [None, "", "   ", "a" * 129])
+def test_success_rejects_invalid_provider_reference(reference):
+    with pytest.raises(PaymentResponseInvalid, match="1 to 128 characters"):
+        PaymentSucceeded(reference)
+
+
+def test_success_accepts_maximum_length_provider_reference():
+    assert PaymentSucceeded("a" * 128).reference == "a" * 128
