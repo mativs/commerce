@@ -27,6 +27,8 @@ make check
 | [Interactive API docs](http://localhost:8000/docs) | Inspect requests and call endpoints |
 | [Health endpoint](http://localhost:8000/health) | Confirm the API responds; does not verify migrations |
 
+The header includes **Reset demo data** for examiners. Type `RESET` to delete orders, monitoring runs, inventory changes, and audit history, then restore the same catalog and stock created by the migrations. This endpoint is intended for the disposable assessment database only.
+
 Use fictional customer details and test card `4242424242424242`. Payments are simulated; no money moves. Geocoding returns a sample Mar del Plata location, not the real coordinates of the entered address.
 
 ## Verify the behavior

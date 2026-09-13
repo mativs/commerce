@@ -6,6 +6,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.adapters.inbound.http.demo_reset import router as demo_reset_router
 from app.adapters.inbound.http.health import router
 from app.adapters.inbound.http.order_validations import router as order_validations_router
 from app.adapters.inbound.http.orders import router as orders_router
@@ -59,6 +60,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.add_middleware(RequestLoggingMiddleware)
     app.include_router(router)
+    app.include_router(demo_reset_router)
     app.include_router(orders_router)
     app.include_router(order_validations_router)
     app.include_router(products_router)

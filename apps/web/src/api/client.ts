@@ -24,6 +24,13 @@ export async function getHealth(signal: AbortSignal): Promise<void> {
   }
 }
 
+export function resetDemoData(): Promise<void> {
+  return request<void>('/demo/reset', {
+    method: 'POST',
+    body: JSON.stringify({ confirmation: 'RESET' }),
+  });
+}
+
 export type Warehouse = { name: string; latitude: number; longitude: number; id: number; created_at: string; updated_at: string; deleted_at: string | null };
 
 export class ApiError extends Error {

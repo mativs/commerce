@@ -50,6 +50,8 @@ h3 { font-size: 0.95rem; }
 .commerce-header nav { display: flex; gap: 8px; }
 .commerce-header nav a { text-decoration: none; color: #52616b; padding: 9px 16px; border-radius: 7px; }
 .commerce-header nav a[aria-current="page"] { color: #115536; background: #eaf1ec; font-weight: 650; }
+.reset-demo-button { color: #ae3434; border-color: #e8c5c0; background: #fff8f7; font-size: .8rem; padding: 8px 12px; white-space: nowrap; }
+.reset-demo-button:hover { background: #fbe9e7; }
 .orders-main { max-width: 1200px; margin: 40px auto 80px; }
 .page-heading { display: flex; align-items: center; justify-content: space-between; gap: 24px; margin-bottom: 30px; }
 .page-heading h1 { margin: 8px 0; }
