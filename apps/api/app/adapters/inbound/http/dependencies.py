@@ -2,6 +2,7 @@ from collections.abc import AsyncIterator
 from typing import Annotated
 
 from fastapi import Depends, Query, Request
+from pydantic import Field
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.adapters.outbound.persistence.orders import SqlAlchemyOrderRepository
@@ -41,6 +42,11 @@ def warehouse_service(session: DatabaseSession) -> WarehouseService:
 OrderServiceDependency = Annotated[OrderService, Depends(order_service)]
 ProductServiceDependency = Annotated[ProductService, Depends(product_service)]
 WarehouseServiceDependency = Annotated[WarehouseService, Depends(warehouse_service)]
+
+
+# PostgreSQL integer columns cannot represent arbitrary-size Python integers.
+# Keep identifier validation at the HTTP boundary so invalid values never reach SQL.
+BoundedId = Annotated[int, Field(gt=0, le=2147483647)]
 
 
 # Shared bounds for all collection endpoints; keep array response bodies compatible.

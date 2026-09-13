@@ -4,6 +4,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.adapters.inbound.http.dependencies import (
+    BoundedId,
     PageLimit,
     PageOffset,
     WarehouseServiceDependency,
@@ -37,7 +38,7 @@ async def list_warehouses(
 
 
 @router.get("/{warehouse_id}", response_model=WarehouseOutput)
-async def get_warehouse(warehouse_id: int, service: WarehouseServiceDependency):
+async def get_warehouse(warehouse_id: BoundedId, service: WarehouseServiceDependency):
     try:
         return await service.get(warehouse_id)
     except WarehouseNotFound as error:
@@ -46,7 +47,7 @@ async def get_warehouse(warehouse_id: int, service: WarehouseServiceDependency):
 
 @router.get("/{warehouse_id}/products", response_model=list[WarehouseProductView])
 async def warehouse_products(
-    warehouse_id: int,
+    warehouse_id: BoundedId,
     service: WarehouseServiceDependency,
     stock: StockFilter = "all",
     limit: PageLimit = 20,

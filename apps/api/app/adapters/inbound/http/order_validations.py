@@ -3,7 +3,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Header, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.adapters.inbound.http.dependencies import DatabaseSession, PageLimit, PageOffset
+from app.adapters.inbound.http.dependencies import BoundedId, DatabaseSession, PageLimit, PageOffset
 from app.adapters.outbound.persistence.order_validation_checks import CHECKS
 from app.adapters.outbound.persistence.order_validations import (
     SqlAlchemyOrderValidationRepository,
@@ -59,7 +59,7 @@ async def list_runs(session: DatabaseSession, limit: PageLimit = 50, offset: Pag
 
 
 @router.get("/{run_id}")
-async def get_run(run_id: int, session: DatabaseSession):
+async def get_run(run_id: BoundedId, session: DatabaseSession):
     result = await SqlAlchemyOrderValidationRepository(session).get(run_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Validation run not found.")
@@ -68,13 +68,13 @@ async def get_run(run_id: int, session: DatabaseSession):
 
 @router.get("/{run_id}/findings")
 async def list_findings(
-    run_id: int,
+    run_id: BoundedId,
     session: DatabaseSession,
     limit: PageLimit = 50,
     offset: PageOffset = 0,
     check: str | None = None,
     severity: Literal["ERROR", "WARNING"] | None = None,
-    order_id: int | None = None,
+    order_id: BoundedId | None = None,
 ):
     repository = SqlAlchemyOrderValidationRepository(session)
     if await repository.get(run_id) is None:

@@ -7,6 +7,7 @@ from fastapi import APIRouter, Header, HTTPException, Response
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.adapters.inbound.http.dependencies import (
+    BoundedId,
     OrderServiceDependency,
     PageLimit,
     PageOffset,
@@ -194,7 +195,7 @@ async def list_orders(
 
 
 @router.get("/{order_id}", response_model=OrderOutput)
-async def get_order(order_id: int, service: Service):
+async def get_order(order_id: BoundedId, service: Service):
     try:
         return asdict(await service.get(order_id))
     except OrderNotFound as error:

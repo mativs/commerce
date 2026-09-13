@@ -6,6 +6,7 @@ from fastapi import APIRouter, HTTPException, Query
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.adapters.inbound.http.dependencies import (
+    BoundedId,
     PageLimit,
     PageOffset,
     ProductServiceDependency,
@@ -51,7 +52,7 @@ async def list_products(
 
 
 @router.get("/{product_id}", response_model=ProductOutput)
-async def get_product(product_id: int, service: ProductServiceDependency):
+async def get_product(product_id: BoundedId, service: ProductServiceDependency):
     try:
         return await service.get(product_id)
     except ProductNotFound as error:
