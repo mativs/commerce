@@ -13,8 +13,13 @@ EXPOSE 8000
 CMD ["uvicorn", "app.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
 
 FROM base AS development
+USER root
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends libatomic1 nodejs \
+  && rm -rf /var/lib/apt/lists/*
 RUN uv sync --frozen --no-install-project
 COPY tests ./tests
+USER app
 CMD ["uvicorn", "app.main:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000", "--reload", "--reload-dir", "/app/app"]
 
 FROM base AS production

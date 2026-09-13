@@ -17,6 +17,7 @@ test:
 check:
 	docker compose run --rm api ruff check .
 	docker compose run --rm api ruff format --check .
+	docker compose run --rm api pyright app tests
 	docker compose run --rm api pytest
 	docker compose run --rm web npm run check
 migrate:

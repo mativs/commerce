@@ -437,7 +437,7 @@ class SqlAlchemyOrderRepository:
             return [
                 self._make_view(
                     row,
-                    customers.get(row.customer_id),
+                    customers.get(row.customer_id) if row.customer_id is not None else None,
                     items_by_order[row.id],
                     history_by_order[row.id],
                 )
