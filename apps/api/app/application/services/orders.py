@@ -36,11 +36,7 @@ class OrderService:
 
         logger.info("order.created", extra={"order_id": order.id})
 
-        # STEP 2: create or update customer before any fulfillment work.
-        if command.customer is not None:
-            await self.repository.ensure_customer(order.id, command.customer)
-
-        # STEP 3: Get coordinates
+        # STEP 2: Get coordinates
         try:
             async with asyncio.timeout(10):
                 coordinates = await self.geocoder.geocode(command.shipping_address)
@@ -52,7 +48,7 @@ class OrderService:
             return await self.repository.get(order.id)
         await self.repository.locate(order.id, coordinates)
 
-        # STEP 4: For each warehouse with stock we try to reserve
+        # STEP 3: For each warehouse with stock we try to reserve
         candidates = await self.repository.candidates(order.id)
         ranked = sorted(
             [
@@ -70,7 +66,7 @@ class OrderService:
             logger.info("order.cancelled", extra={"order_id": order.id, "outcome": "OUT_OF_STOCK"})
             return await self.repository.get(order.id)
 
-        # STEP 5: persist payment initiation before calling the gateway.
+        # STEP 4: persist payment initiation before calling the gateway.
         await self.repository.start_payment(order.id)
         try:
             async with asyncio.timeout(10):

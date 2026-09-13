@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 import pytest
 from sqlalchemy import select, text
 
-from app.adapters.outbound.persistence.models import Product, Stock, Warehouse
+from app.adapters.outbound.persistence.models import Customer, Product, Stock, Warehouse
 from app.adapters.outbound.persistence.orders import SqlAlchemyOrderRepository
 from app.application.ports.geocoder import GeocodingUnavailable
 from app.application.ports.payment import PaymentResponse, PaymentResult, PaymentUnavailable
@@ -83,6 +83,14 @@ def stock_rows(sessions):
                 (s.warehouse_id, s.product_id, s.on_hand, s.reserved)
                 for s in await session.scalars(select(Stock).order_by(Stock.id))
             ]
+
+    return asyncio.run(read())
+
+
+def customer_rows(sessions):
+    async def read():
+        async with sessions() as session:
+            return list(await session.scalars(select(Customer)))
 
     return asyncio.run(read())
 
@@ -185,6 +193,7 @@ def test_invalid_input_leaves_no_order(checkout, items):
     )
     assert response.status_code == 422, response.text
     assert client.get("/orders").json() == []
+    assert customer_rows(sessions) == []
     client.app.state.order_geocoder.geocode.assert_not_awaited()
 
 

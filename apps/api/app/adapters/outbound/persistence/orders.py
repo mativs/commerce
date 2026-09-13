@@ -20,7 +20,6 @@ from app.adapters.outbound.persistence.models import (
 )
 from app.domain.order import (
     CreateOrder,
-    CustomerDetails,
     IdempotencyConflict,
     InvalidOrder,
     OrderItemView,
@@ -126,6 +125,26 @@ class SqlAlchemyOrderRepository:
                 if row.request_hash != fingerprint:
                     raise IdempotencyConflict("This idempotency key belongs to a different order.")
                 return await self._view(row), False
+            if command.customer is not None:
+                customer_id = await self.session.scalar(
+                    insert(Customer)
+                    .values(
+                        first_name=command.customer.first_name,
+                        last_name=command.customer.last_name,
+                        phone=command.customer.phone,
+                        email=command.customer.email,
+                    )
+                    .on_conflict_do_nothing(index_elements=[Customer.email])
+                    .returning(Customer.id)
+                )
+                if customer_id is None:
+                    customer_id = await self.session.scalar(
+                        select(Customer.id)
+                        .where(Customer.email == command.customer.email)
+                        .with_for_update()
+                    )
+                row = await self._order(order_id)
+                row.customer_id = customer_id
             product_ids = [item.product_id for item in command.items]
             # Shared locks preserve catalog price/eligibility until snapshots and total are saved.
             eligible_product_ids = list(
@@ -295,28 +314,6 @@ class SqlAlchemyOrderRepository:
             order.warehouse_id = warehouse_id
             order.status = "BOOKED"
             return True
-
-    async def ensure_customer(self, order_id: int, customer: CustomerDetails) -> None:
-        async with self.session.begin():
-            order = await self._order(order_id, lock=True)
-            if order.customer_id is not None:
-                return
-            customer_row = await self.session.scalar(
-                insert(Customer)
-                .values(
-                    first_name=customer.first_name,
-                    last_name=customer.last_name,
-                    phone=customer.phone,
-                    email=customer.email,
-                )
-                .on_conflict_do_nothing(index_elements=[Customer.email])
-                .returning(Customer.id)
-            )
-            if customer_row is None:
-                customer_row = await self.session.scalar(
-                    select(Customer.id).where(Customer.email == customer.email).with_for_update()
-                )
-            order.customer_id = customer_row
 
     async def cancel(self, order_id: int, reason: str) -> None:
         async with self.session.begin():
