@@ -9,7 +9,13 @@ logger = logging.getLogger(__name__)
 
 
 async def reset_demo_data(session: AsyncSession) -> None:
-    """Replace all mutable demo state with the same data as a fresh migration."""
+    """Replace disposable assessment data; not a production administration operation.
+
+    All statements share one transaction, committed only after reseeding succeeds.
+    On failure, the request's session context closes and rolls back the transaction;
+    the shared HTTP boundary logs the error and returns 500. Let errors propagate.
+    """
+    # Fixed table identifiers, with no request interpolation. Seed values below are bound.
     await session.execute(
         sa.text(
             "TRUNCATE TABLE order_validation_findings, "
