@@ -102,7 +102,7 @@ def test_checkout_snapshots_duplicates_history_and_replay(checkout):
     assert order["customer"]["email"] == "ana@example.com"
     assert order["total_amount"] == "74.04"
     assert [i["quantity"] for i in order["items"]] == [4, 2]
-    assert [h["status"] for h in order["history"]] == ["CREATED", "BOOKED", "PAID"]
+    assert [h["status"] for h in order["history"]] == ["CREATED", "BOOKED", "PAYING", "PAID"]
     assert order["shipping_address"]["recipient_name"] == "Ana Pérez"
     assert client.get(response.headers["location"]).json() == order
     assert client.get("/orders").json() == [order]
@@ -122,8 +122,8 @@ def test_checkout_snapshots_duplicates_history_and_replay(checkout):
     [
         ("geo", "GEOCODING_FAILED", ["CREATED", "CANCELLED"], 0),
         ("stock", "OUT_OF_STOCK", ["CREATED", "CANCELLED"], 0),
-        ("payment", "PAYMENT_FAILED", ["CREATED", "BOOKED", "CANCELLED"], 0),
-        ("unknown", None, ["CREATED", "BOOKED"], 4),
+        ("payment", "PAYMENT_FAILED", ["CREATED", "BOOKED", "PAYING", "CANCELLED"], 0),
+        ("unknown", None, ["CREATED", "BOOKED", "PAYING"], 4),
     ],
 )
 def test_failures_are_durable(checkout, failure, reason, history, reserved):
@@ -215,6 +215,10 @@ def test_payment_does_not_hold_stock_locks_and_no_overselling(checkout):
             task = asyncio.create_task(first_service.create(command, "first"))
             try:
                 await asyncio.wait_for(payment_entered.wait(), 5)
+                async with sessions() as observer:
+                    pending = await SqlAlchemyOrderRepository(observer).list(10, 0)
+                    assert pending[0].status == "PAYING"
+                    assert pending[0].history[-1].status == "PAYING"
                 # NOWAIT proves inventory locks were released during payment.
                 async with sessions() as probe, probe.begin():
                     await probe.execute(text("SELECT * FROM stock FOR UPDATE NOWAIT"))
@@ -287,6 +291,7 @@ def test_failed_finalization_rolls_back_stock_and_history(checkout):
             repository = SqlAlchemyOrderRepository(session)
             order, _ = await repository.create(command, "rollback", "payment:rollback")
             assert await repository.reserve(order.id, warehouses[0])
+            await repository.start_payment(order.id)
             async with session.begin():
                 await session.execute(
                     text("""
@@ -311,8 +316,8 @@ def test_failed_finalization_rolls_back_stock_and_history(checkout):
             with pytest.raises(DBAPIError):
                 await repository.cancel(order.id, "PAYMENT_FAILED")
             saved = await repository.get(order.id)
-            assert saved.status == "BOOKED" and saved.failure_reason is None
-            assert [h.status for h in saved.history] == ["CREATED", "BOOKED"]
+            assert saved.status == "PAYING" and saved.failure_reason is None
+            assert [h.status for h in saved.history] == ["CREATED", "BOOKED", "PAYING"]
 
     asyncio.run(check())
     assert sum(s[3] for s in stock_rows(sessions)) == 4
@@ -353,8 +358,8 @@ def test_missing_stock_cannot_partially_book(checkout):
     [
         ("Please test geocoding-timeout today", "CANCELLED", "GEOCODING_FAILED", 0, 201),
         ("payment-declined", "CANCELLED", "PAYMENT_FAILED", 0, 201),
-        ("payment-timeout", "BOOKED", None, 4, 202),
-        ("payment-failed", "BOOKED", None, 4, 202),
+        ("payment-timeout", "PAYING", None, 4, 202),
+        ("payment-failed", "PAYING", None, 4, 202),
         (None, "PAID", None, 4, 201),
         ("Leave at the door", "PAID", None, 4, 201),
         ("not-payment-failed", "PAID", None, 4, 201),
@@ -403,6 +408,30 @@ def test_concurrent_note_simulations_are_isolated(checkout):
     with ThreadPoolExecutor(max_workers=4) as pool:
         responses = list(pool.map(submit, notes))
     assert [r.status_code for r in responses] == [201, 201, 202, 201]
-    assert [r.json()["status"] for r in responses] == ["CANCELLED", "CANCELLED", "BOOKED", "PAID"]
+    assert [r.json()["status"] for r in responses] == ["CANCELLED", "CANCELLED", "PAYING", "PAID"]
     assert sum(s[3] for s in stock_rows(sessions)) == 8
     client.app.state.payment_gateway.charge.assert_awaited_once()
+
+
+def test_stock_reservation_and_release_are_audited(checkout):
+    client, sessions, body, _ = checkout
+    response = client.post(
+        "/orders",
+        json={**body, "notes": "payment-declined"},
+        headers={"Idempotency-Key": "stock-audit"},
+    )
+    assert response.status_code == 201
+    assert response.json()["failure_reason"] == "PAYMENT_FAILED"
+
+    async def read():
+        async with sessions() as session:
+            return (
+                await session.execute(
+                    text(
+                        "SELECT old_values->>'reserved', new_values->>'reserved' FROM audit_logs "
+                        "WHERE table_name='stock' AND action='update' ORDER BY id"
+                    )
+                )
+            ).all()
+
+    assert asyncio.run(read()) == [("0", "2"), ("0", "2"), ("2", "0"), ("2", "0")]

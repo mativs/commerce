@@ -102,7 +102,7 @@ class HistoryOutput(BaseModel):
 
 class OrderOutput(BaseModel):
     id: int
-    status: Literal["CREATED", "BOOKED", "PAID", "CANCELLED"]
+    status: Literal["CREATED", "BOOKED", "PAYING", "PAID", "CANCELLED"]
     shipping_address: dict
     latitude: float | None
     longitude: float | None
@@ -154,7 +154,7 @@ async def create_order(
     except IdempotencyConflict as error:
         raise HTTPException(status_code=409, detail=str(error)) from error
     response.headers["Location"] = f"/orders/{order.id}"
-    if order.status in ("CREATED", "BOOKED"):
+    if order.status in ("CREATED", "BOOKED", "PAYING"):
         response.status_code = 202
     return asdict(order)
 

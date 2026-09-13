@@ -34,9 +34,9 @@ are not accepted as input.
 
 - `201`: the order is saved and is `PAID` or `CANCELLED`. Inspect `failure_reason`
   for `GEOCODING_FAILED`, `OUT_OF_STOCK`, or `PAYMENT_FAILED`.
-- `202`: the saved order is still `CREATED` or `BOOKED`. A replay observes its current
+- `202`: the saved order is still `CREATED`, `BOOKED`, or `PAYING`. A replay observes its current
   state without starting another checkout. A payment with an unknown outcome stays
-  `BOOKED` and retains its reservation.
+  `PAYING` and retains its reservation.
 - `409`: this key was already used with different input.
 - `422`: invalid input or an unavailable/non-USD product; no order is created.
 
@@ -60,7 +60,7 @@ and always succeeds, with a stable provider reference keyed by the idempotency k
 so retries return the same reference. No real payment is made.
 
 There is no recovery worker yet. A crash after creation can leave `CREATED`; a crash
-or unknown payment outcome after reservation can leave `BOOKED`. Reusing the POST
+or unknown payment outcome after reservation can leave `PAYING`. Reusing the POST
 key or reading the order observes that state; it does not resume processing. Future
 recovery must reconcile payment using the same key before releasing reservations.
 Unexpected database errors roll back the current transaction, not earlier committed
@@ -83,8 +83,8 @@ and requires a complete keyword; if several appear, the first one wins.
 | --- | --- |
 | `geocoding-timeout` | Cancelled with `GEOCODING_FAILED`; no payment attempted. |
 | `payment-declined` | Cancelled with `PAYMENT_FAILED`; reserved stock released. |
-| `payment-timeout` | Remains `BOOKED` (HTTP 202); reserved stock retained. |
-| `payment-failed` | Provider unavailable; remains `BOOKED` (HTTP 202), stock retained. |
+| `payment-timeout` | Remains `PAYING` (HTTP 202); reserved stock retained. |
+| `payment-failed` | Provider unavailable; remains `PAYING` (HTTP 202), stock retained. |
 
 Without a recognized keyword, mock payments succeed. Timeout markers raise the
 same exception handled by the service immediately, without waiting ten seconds.

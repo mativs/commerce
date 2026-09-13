@@ -65,7 +65,8 @@ class OrderService:
             logger.info("order.cancelled", extra={"order_id": order.id, "outcome": "OUT_OF_STOCK"})
             return await self.repository.get(order.id)
 
-        # STEP 5: pay the order
+        # STEP 5: persist payment initiation before calling the gateway.
+        await self.repository.start_payment(order.id)
         try:
             async with asyncio.timeout(10):
                 result = await self.payment.charge(

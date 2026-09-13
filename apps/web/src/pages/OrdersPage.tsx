@@ -14,7 +14,7 @@ const reasons: Record<string, string> = {
   OUT_OF_STOCK: 'No single warehouse has enough stock to fulfill these items. Try a smaller quantity or different items in a new order.',
   PAYMENT_FAILED: 'Payment was declined. Your stock reservation has been released.',
 };
-const labels: Record<string, string> = { CREATED: 'Created', BOOKED: 'Awaiting payment', PAID: 'Paid', CANCELLED: 'Cancelled' };
+const labels: Record<string, string> = { CREATED: 'Created', BOOKED: 'Stock reserved', PAYING: 'Awaiting payment', PAID: 'Paid', CANCELLED: 'Cancelled' };
 const storageKey = 'canals-checkout-attempt';
 type Attempt = { key: string; payload: OrderInput };
 function savedAttempt(): Attempt | null {

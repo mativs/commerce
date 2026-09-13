@@ -123,7 +123,7 @@ class Order(Base):
         CheckConstraint("longitude BETWEEN -180 AND 180", name="longitude_range"),
         CheckConstraint("(latitude IS NULL) = (longitude IS NULL)", name="coordinates_pair"),
         CheckConstraint(
-            "status IN ('CREATED', 'BOOKED', 'PAID', 'CANCELLED')", name="status_valid"
+            "status IN ('CREATED', 'BOOKED', 'PAYING', 'PAID', 'CANCELLED')", name="status_valid"
         ),
         CheckConstraint(
             "total_amount >= 0 AND total_amount < 'Infinity'::numeric", name="total_valid"
@@ -136,9 +136,7 @@ class Order(Base):
     latitude: Mapped[float | None] = mapped_column(Float)
     longitude: Mapped[float | None] = mapped_column(Float)
     order_idempotency_key: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
-    payment_idempotency_key: Mapped[str] = mapped_column(
-        String(128), unique=True, nullable=False
-    )
+    payment_idempotency_key: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
     request_hash: Mapped[str | None] = mapped_column(String(64))
     failure_reason: Mapped[str | None] = mapped_column(String(40))
     payment_description: Mapped[str | None] = mapped_column(String(255))
@@ -171,7 +169,7 @@ class OrderStatusHistory(Base):
     __tablename__ = "order_status_history"
     __table_args__ = (
         CheckConstraint(
-            "status IN ('CREATED', 'BOOKED', 'PAID', 'CANCELLED')", name="status_valid"
+            "status IN ('CREATED', 'BOOKED', 'PAYING', 'PAID', 'CANCELLED')", name="status_valid"
         ),
         Index("ix_order_status_history_chronology", "order_id", "created_at", "id"),
     )

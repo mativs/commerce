@@ -116,7 +116,7 @@ export type OrderInput = {
 };
 export type Order = Omit<OrderInput, 'items'> & {
   id: number;
-  status: 'CREATED' | 'BOOKED' | 'PAID' | 'CANCELLED';
+  status: 'CREATED' | 'BOOKED' | 'PAYING' | 'PAID' | 'CANCELLED';
   warehouse_id: number | null;
   latitude: number | null;
   longitude: number | null;

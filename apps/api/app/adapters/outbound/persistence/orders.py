@@ -186,9 +186,7 @@ class SqlAlchemyOrderRepository:
             return [
                 WarehouseCandidate(
                     warehouse.id,
-                    Coordinates(
-                        latitude=warehouse.latitude, longitude=warehouse.longitude
-                    ),
+                    Coordinates(latitude=warehouse.latitude, longitude=warehouse.longitude),
                 )
                 for warehouse in warehouses
             ]
@@ -270,9 +268,9 @@ class SqlAlchemyOrderRepository:
     async def cancel(self, order_id: int, reason: str) -> None:
         async with self.session.begin():
             order = await self._order(order_id, lock=True)
-            if order.status not in ("CREATED", "BOOKED"):
+            if order.status not in ("CREATED", "BOOKED", "PAYING"):
                 return
-            if order.status == "BOOKED":
+            if order.status in ("BOOKED", "PAYING"):
                 quantities = {i.product_id: i.quantity for i in await self._items(order_id)}
                 stocks = list(
                     await self.session.scalars(
@@ -295,10 +293,17 @@ class SqlAlchemyOrderRepository:
             order.failure_reason = reason
             order.status = "CANCELLED"
 
+    async def start_payment(self, order_id: int) -> None:
+        async with self.session.begin():
+            order = await self._order(order_id, lock=True)
+            if order.status != "BOOKED":
+                raise RuntimeError("Only a booked order can start payment.")
+            order.status = "PAYING"
+
     async def pay(self, order_id: int, payment_identifier: str | None = None) -> None:
         async with self.session.begin():
             order = await self._order(order_id, lock=True)
-            if order.status == "BOOKED":
+            if order.status == "PAYING":
                 order.payment_identifier = payment_identifier
                 order.status = "PAID"
 
