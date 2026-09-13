@@ -9,7 +9,12 @@ from sqlalchemy import select, text
 from app.adapters.outbound.persistence.models import Customer, Product, Stock, Warehouse
 from app.adapters.outbound.persistence.orders import SqlAlchemyOrderRepository
 from app.application.ports.geocoder import GeocodingUnavailable
-from app.application.ports.payment import PaymentResponse, PaymentResult, PaymentUnavailable
+from app.application.ports.payment import (
+    PaymentDeclined,
+    PaymentResponse,
+    PaymentSucceeded,
+    PaymentUnavailable,
+)
 from app.application.services.orders import OrderService
 from app.domain.order import CreateOrder, PaymentDetails, RequestedItem, distance_km
 from app.domain.shipping import AddressDetails, Coordinates
@@ -35,9 +40,7 @@ def checkout(database_client):
         latitude=-38, longitude=-57.57
     )
     client.app.state.payment_gateway = AsyncMock()
-    client.app.state.payment_gateway.charge.return_value = PaymentResponse(
-        PaymentResult.SUCCEEDED, "pay_test_success"
-    )
+    client.app.state.payment_gateway.charge.return_value = PaymentSucceeded("pay_test_success")
 
     async def setup():
         async with sessions() as session, session.begin():
@@ -140,6 +143,7 @@ def test_checkout_snapshots_duplicates_history_and_replay(checkout):
         ("stock", "OUT_OF_STOCK", ["CREATED", "CANCELLED"], 0),
         ("payment", "PAYMENT_FAILED", ["CREATED", "BOOKED", "PAYING", "CANCELLED"], 0),
         ("unknown", None, ["CREATED", "BOOKED", "PAYING"], 4),
+        ("invalid", None, ["CREATED", "BOOKED", "PAYING"], 4),
     ],
 )
 def test_failures_are_durable(checkout, failure, reason, history, reserved):
@@ -149,11 +153,15 @@ def test_failures_are_durable(checkout, failure, reason, history, reserved):
     elif failure == "stock":
         body["items"][0]["quantity"] = 11
     elif failure == "payment":
-        client.app.state.payment_gateway.charge.return_value = PaymentResult.DECLINED
+        client.app.state.payment_gateway.charge.return_value = PaymentDeclined()
+    elif failure == "invalid":
+        client.app.state.payment_gateway.charge.return_value = None
     else:
         client.app.state.payment_gateway.charge.side_effect = PaymentUnavailable()
     response = client.post("/orders", json=body, headers={"Idempotency-Key": failure})
-    assert response.status_code == (202 if failure == "unknown" else 201), response.text
+    assert response.status_code == (
+        202 if failure in ("unknown", "invalid") else 201
+    ), response.text
     order = response.json()
     assert order["customer"]["email"] == "ana@example.com"
     assert [h["status"] for h in order["history"]] == history
@@ -228,7 +236,7 @@ def test_payment_does_not_hold_stock_locks_and_no_overselling(checkout):
             ) -> PaymentResponse:
                 payment_entered.set()
                 await release_payment.wait()
-                return PaymentResponse(PaymentResult.SUCCEEDED)
+                return PaymentSucceeded("pay_blocking_success")
 
         command = CreateOrder(
             AddressDetails(**{**ADDRESS, "country_code": "AR"}),
@@ -412,9 +420,7 @@ def test_note_simulations_and_replay(checkout, notes, status, reason, reserved, 
         client.app.state.payment_gateway.charge.assert_not_awaited()
     # A later ordinary checkout must not inherit another request's simulation.
     body["notes"] = "Normal checkout"
-    client.app.state.payment_gateway.charge.return_value = PaymentResponse(
-        PaymentResult.SUCCEEDED, "pay_second_success"
-    )
+    client.app.state.payment_gateway.charge.return_value = PaymentSucceeded("pay_second_success")
     normal = client.post("/orders", json=body, headers={"Idempotency-Key": "normal"})
     assert normal.status_code == 201, normal.text
     assert normal.json()["status"] == "PAID"

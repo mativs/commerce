@@ -4,7 +4,12 @@ from uuid import uuid4
 
 from app.application.ports.geocoder import Geocoder, GeocodingUnavailable
 from app.application.ports.orders import OrderRepository
-from app.application.ports.payment import PaymentGateway, PaymentResult, PaymentUnavailable
+from app.application.ports.payment import (
+    PaymentDeclined,
+    PaymentGateway,
+    PaymentSucceeded,
+    PaymentUnavailable,
+)
 from app.domain.order import CreateOrder, OrderView, distance_km
 
 logger = logging.getLogger(__name__)
@@ -82,14 +87,17 @@ class OrderService:
             )
             # Do not release inventory for a payment that may have succeeded.
             return await self.repository.get(order.id)
-        payment_result = result.result if hasattr(result, "result") else result
-        payment_identifier = getattr(result, "identifier", None)
-        if payment_result == PaymentResult.SUCCEEDED:
-            await self.repository.pay(order.id, payment_identifier)
+        if isinstance(result, PaymentSucceeded):
+            await self.repository.pay(order.id, result.reference)
             logger.info("order.paid", extra={"order_id": order.id})
-        else:
+        elif isinstance(result, PaymentDeclined):
             await self.repository.cancel(order.id, "PAYMENT_FAILED")
             logger.warning(
                 "order.cancelled", extra={"order_id": order.id, "outcome": "PAYMENT_FAILED"}
+            )
+        else:
+            logger.warning(
+                "order.payment_pending",
+                extra={"order_id": order.id, "outcome": "PAYMENT_RESPONSE_INVALID"},
             )
         return await self.repository.get(order.id)

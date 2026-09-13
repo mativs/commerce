@@ -2,8 +2,10 @@ import asyncio
 from decimal import Decimal
 from unittest.mock import AsyncMock, patch
 
+import pytest
+
 from app.adapters.outbound.payments.mock import MockPaymentGateway
-from app.application.ports.payment import PaymentResult
+from app.application.ports.payment import PaymentSucceeded
 from app.domain.order import PaymentDetails
 
 
@@ -21,9 +23,13 @@ def test_mock_payment_always_succeeds_with_delay_and_stable_reference():
                 assert result == await MockPaymentGateway().charge(
                     payment, Decimal("12.34"), idempotency_key=key
                 )
-                outcomes.append(result.result)
-            assert set(outcomes) == {PaymentResult.SUCCEEDED}
+                outcomes.append(result)
+            assert all(isinstance(outcome, PaymentSucceeded) for outcome in outcomes)
             assert sleep.await_count == 40
             sleep.assert_awaited_with(2)
-
     asyncio.run(check())
+
+
+def test_success_requires_nonempty_provider_reference():
+    with pytest.raises(ValueError, match="nonempty provider reference"):
+        PaymentSucceeded("   ")

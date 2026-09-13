@@ -1,20 +1,25 @@
 from dataclasses import dataclass
 from decimal import Decimal
-from enum import Enum
 from typing import Protocol
 
 from app.domain.order import PaymentDetails
 
 
-class PaymentResult(Enum):
-    SUCCEEDED = "succeeded"
-    DECLINED = "declined"
+@dataclass(frozen=True)
+class PaymentSucceeded:
+    reference: str
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.reference, str) or not self.reference.strip():
+            raise ValueError("A successful payment requires a nonempty provider reference.")
 
 
 @dataclass(frozen=True)
-class PaymentResponse:
-    result: PaymentResult
-    identifier: str | None = None
+class PaymentDeclined:
+    pass
+
+
+PaymentResponse = PaymentSucceeded | PaymentDeclined
 
 
 class PaymentUnavailable(Exception):

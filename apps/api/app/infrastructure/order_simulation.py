@@ -9,9 +9,9 @@ from decimal import Decimal
 
 from app.application.ports.geocoder import Geocoder
 from app.application.ports.payment import (
+    PaymentDeclined,
     PaymentGateway,
     PaymentResponse,
-    PaymentResult,
     PaymentUnavailable,
 )
 from app.application.services.orders import OrderService
@@ -48,7 +48,7 @@ class SimulatedPaymentGateway:
         if self.marker == "payment-failed":
             raise PaymentUnavailable("Simulated payment provider failure")
         if self.marker == "payment-declined":
-            return PaymentResponse(PaymentResult.DECLINED)
+            return PaymentDeclined()
         return await self.delegate.charge(payment, amount, idempotency_key=idempotency_key)
 
 
